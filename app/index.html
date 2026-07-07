@@ -1,0 +1,4355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音乐星球 · Music Planet</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --accent: #ff5a12;
+    --accent2: #ff9a3d;
+    --accent-glow: rgba(255,90,18,0.16);
+    --bg-panel: rgba(8,5,14,0.44);
+    --border: rgba(255,255,255,0.08);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255,255,255,0.52);
+    --text-muted: rgba(255,255,255,0.32);
+    --blur: blur(8px) saturate(140%);
+    --panel-shadow: 0 8px 36px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.16);
+    --radius: 14px;
+    --left-w: 280px;
+    --right-w: 260px;
+    --bar-h: 76px;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #06040e;
+    font-family: -apple-system, "Segoe UI Variable", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    color: var(--text-primary);
+    user-select: none;
+  }
+
+  /* === THREE.JS CANVAS === */
+  #three-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  /* === LIQUID AURA CANVAS === */
+  #liquid-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    display: none;
+  }
+
+  /* === BACKGROUND VIGNETTE === */
+  #bg-gradient {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, rgba(0,0,0,0.55) 100%);
+  }
+
+  /* === GLASS PANEL BASE === */
+  .panel {
+    position: fixed;
+    background: var(--bg-panel);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    border: 1px solid var(--border);
+    box-shadow: var(--panel-shadow);
+    z-index: 10;
+    overflow: hidden;
+    border-radius: var(--radius);
+  }
+
+  /* === LEFT PANEL === */
+  #left-panel {
+    left: 16px;
+    top: 16px;
+    bottom: calc(var(--bar-h) + 28px);
+    width: var(--left-w);
+    display: flex;
+    flex-direction: column;
+  }
+
+  #search-wrap {
+    padding: 14px 14px 12px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #search-wrap .search-input-wrap {
+    flex: 1;
+  }
+
+  .search-input-wrap {
+    position: relative;
+  }
+
+  .search-input-wrap .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,0.4);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+  }
+
+  #search-input {
+    width: 100%;
+    height: 44px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    color: white;
+    font-size: 14px;
+    padding: 0 14px 0 38px;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  #search-input::placeholder { color: rgba(255,255,255,0.35); }
+  #search-input:focus {
+    border-color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.10);
+    box-shadow: none;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    padding: 10px 14px 6px;
+  }
+
+  #playlist-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 8px;
+  }
+
+  #playlist-wrap::-webkit-scrollbar { width: 4px; }
+  #playlist-wrap::-webkit-scrollbar-track { background: transparent; }
+  #playlist-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+  #empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: rgba(255,255,255,0.35);
+    font-size: 13px;
+  }
+  .history-header {
+    padding: 12px 14px 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.25); text-transform: uppercase;
+  }
+
+  .song-item {
+    height: 60px;
+    padding: 0 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background 0.15s;
+    position: relative;
+  }
+
+  .song-item:hover { background: rgba(255,255,255,0.06); }
+
+  .song-item.active {
+    background: rgba(255,255,255,0.08);
+  }
+
+  .song-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 3px 3px 0;
+    box-shadow: 2px 0 12px var(--accent-glow, rgba(255,90,18,0.4));
+  }
+
+  .song-item.active .song-name { color: var(--accent); }
+
+  /* Equalizer animation on active song */
+  @keyframes eq1 { 0%,100%{height:3px} 40%{height:12px} 70%{height:5px} }
+  @keyframes eq2 { 0%,100%{height:8px} 25%{height:2px} 60%{height:13px} }
+  @keyframes eq3 { 0%,100%{height:5px} 50%{height:11px} 80%{height:3px} }
+  .eq-icon { display:none; align-items:flex-end; gap:2px; height:14px; width:11px; flex-shrink:0; margin-right:2px; }
+  .eq-icon span { display:block; width:2.5px; background:var(--accent); border-radius:1px; }
+  .eq-icon span:nth-child(1) { height:5px; animation: eq1 0.9s ease-in-out infinite; }
+  .eq-icon span:nth-child(2) { height:10px; animation: eq2 0.75s ease-in-out infinite 0.12s; }
+  .eq-icon span:nth-child(3) { height:6px; animation: eq3 0.85s ease-in-out infinite 0.24s; }
+  .body-playing .song-item.active .eq-icon { display:flex; }
+  .body-playing .song-item.active .song-dur { display:none; }
+
+  .song-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .song-thumb-placeholder {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.25);
+  }
+
+  .song-index {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .song-info { flex: 1; min-width: 0; }
+
+  .song-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .song-artist {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+
+  .song-dur {
+    font-size: 11px;
+    color: rgba(255,255,255,0.44);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .vip-badge {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.5;
+    vertical-align: middle;
+  }
+
+  #status-msg {
+    padding: 24px 20px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  #status-msg a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* === RIGHT PANEL === */
+  #right-panel {
+    right: 16px;
+    top: 16px;
+    bottom: calc(var(--bar-h) + 28px);
+    width: var(--right-w);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Now playing orbit block */
+  #right-orbit-card {
+    flex-shrink: 0;
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  #right-art-wrap {
+    width: min(100%, 174px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    position: relative;
+    box-shadow:
+      0 20px 60px rgba(0,0,0,0.65),
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 0 55px var(--accent-glow, rgba(255,90,18,0.15));
+    transition: box-shadow 0.08s ease;
+  }
+
+  #right-album-art {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 50%;
+    animation: vinyl-spin 22s linear infinite;
+    animation-play-state: paused;
+  }
+
+  @keyframes vinyl-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .body-playing #right-album-art {
+    animation-play-state: running;
+  }
+
+  #right-art-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: rgba(255,255,255,0.2);
+  }
+
+
+  #right-song-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.96);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-top: 16px;
+    letter-spacing: -0.02em;
+    text-align: center;
+  }
+
+  #right-song-artist {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.36);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-top: 6px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  #lyrics-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+  }
+
+  #lyrics-wrap::-webkit-scrollbar { width: 3px; }
+  #lyrics-wrap::-webkit-scrollbar-track { background: transparent; }
+  #lyrics-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+  .lyric-line {
+    padding: 8px 20px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.28);
+    font-weight: 400;
+    line-height: 1.7;
+    cursor: pointer;
+    transition: color 0.4s, font-size 0.3s, font-weight 0.3s;
+    text-align: center;
+  }
+
+  .lyric-line.near { color: rgba(255,255,255,0.48); }
+  .lyric-line:hover { color: rgba(255,255,255,0.60); }
+
+  .lyric-line.active {
+    font-size: 15px;
+    color: rgba(255,255,255,0.92);
+    font-weight: 700;
+    text-shadow: 0 0 28px var(--accent-glow, rgba(122,44,255,0.20));
+  }
+
+  .lyric-trans {
+    font-size: 11px;
+    color: rgba(255,255,255,0.26);
+    text-align: center;
+    padding: 1px 20px 5px;
+    line-height: 1.5;
+    transition: color 0.4s;
+  }
+
+  .lyric-line.near .lyric-trans { color: rgba(255,255,255,0.32); }
+  .lyric-line.active .lyric-trans {
+    color: rgba(255,255,255,0.52);
+  }
+
+  .song-art-wrap {
+    width: 38px; height: 38px;
+    border-radius: 8px; overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+  .song-art {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+  .song-art-placeholder {
+    width: 38px; height: 38px;
+    border-radius: 8px; flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.2);
+  }
+
+  #no-lyrics {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* === BOTTOM BAR === */
+  #bottom-bar {
+    left: 12px; right: 12px; bottom: 12px;
+    width: auto;
+    height: var(--bar-h);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 0;
+    z-index: 20;
+  }
+
+  /* Song info left */
+  .bar-song-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 240px;
+    flex-shrink: 0;
+    transition: opacity 0.25s ease;
+  }
+  .bar-song-info.fade-out { opacity: 0; }
+
+  #bar-art {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+    transition: box-shadow 0.5s;
+  }
+
+  .bar-titles { min-width: 0; }
+  #bar-title {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: white;
+  }
+  #bar-artist {
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Center controls */
+  .bar-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0 20px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .ctrl-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s, background 0.15s;
+    border-radius: 50%;
+    outline: none;
+  }
+
+  #btn-prev, #btn-next {
+    width: 32px; height: 32px;
+    opacity: 0.72;
+  }
+  #btn-prev:hover, #btn-next:hover { opacity: 1; }
+
+  #btn-play-pause {
+    width: 40px; height: 40px;
+    background: var(--accent-glow, rgba(122,44,255,0.22));
+    border: 1px solid var(--accent, #7a2cff);
+    border-radius: 50%;
+    color: var(--accent2, #b070ff);
+    opacity: 0.90;
+  }
+
+  #btn-play-pause:hover { opacity: 1; filter: brightness(1.25); }
+  .ctrl-btn:active { transform: scale(0.93); }
+
+  /* Shuffle & Repeat */
+  #btn-shuffle, #btn-repeat {
+    width: 28px; height: 28px;
+    opacity: 0.52;
+    position: relative;
+    color: rgba(255,255,255,0.7);
+    transition: opacity 0.2s, color 0.2s, filter 0.2s;
+  }
+  #btn-shuffle:hover, #btn-repeat:hover { opacity: 0.75; }
+  #btn-shuffle.active, #btn-repeat.active {
+    opacity: 1;
+    color: var(--accent);
+    filter: drop-shadow(0 0 5px var(--accent, rgba(122,44,255,0.55)));
+  }
+  #btn-repeat.active::after {
+    content: '';
+    position: absolute;
+    bottom: 3px; right: 3px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  #btn-repeat.repeat-one::after { content: '1'; width:auto; height:auto; font-size:7px; font-weight:700; bottom:2px; right:1px; background:none; color:var(--accent); }
+
+  .progress-area {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.56);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #progress-bar-wrap {
+    flex: 1;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    position: relative;
+    overflow: visible;
+  }
+
+  #progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #7a2cff), var(--accent2, #b070ff));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.1s linear;
+    position: relative;
+    box-shadow: 0 0 6px var(--accent-glow, rgba(122,44,255,0.40));
+  }
+
+  #progress-fill::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%) scale(0);
+    width: 10px; height: 10px;
+    background: var(--accent2, #b070ff);
+    border-radius: 50%;
+    transition: transform 0.15s;
+  }
+
+  #progress-bar-wrap:hover #progress-fill::after { transform: translateY(-50%) scale(1); }
+
+  #progress-tooltip {
+    position: absolute;
+    top: -26px;
+    padding: 3px 7px;
+    background: rgba(4,3,10,0.88);
+    color: var(--accent2, #b070ff);
+    border: 1px solid var(--accent-glow, rgba(122,44,255,0.35));
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    z-index: 99;
+  }
+  #progress-tooltip.hidden { display: none; }
+
+  /* Right controls */
+  .bar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 160px;
+    flex-shrink: 0;
+    justify-content: flex-end;
+  }
+
+  .volume-wrap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .vol-icon { color: rgba(255,255,255,0.55); flex-shrink: 0; }
+
+  #volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 72px;
+    height: 3px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  #volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  #volume-slider::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    border: none;
+  }
+
+  #btn-like {
+    width: 28px; height: 28px;
+    color: rgba(255,255,255,0.4);
+    transition: color 0.2s, transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  #btn-like.liked { color: #ff4d6a; }
+  #btn-like:hover { transform: scale(1.15); }
+
+  /* === THEMES === */
+  [data-theme="crimson"] {
+    --accent: #ff1a3f; --accent2: #ff607a;
+    --accent-glow: rgba(255,26,63,0.20);
+    --bg-panel: rgba(10,2,5,0.44); --border: rgba(255,255,255,0.07);
+  }
+  [data-theme="rose"] {
+    --accent: #ff2080; --accent2: #ff70b8;
+    --accent-glow: rgba(255,32,128,0.20);
+    --bg-panel: rgba(10,1,7,0.44); --border: rgba(255,255,255,0.07);
+  }
+  [data-theme="violet"] {
+    --accent: #8030ff; --accent2: #b070ff;
+    --accent-glow: rgba(128,48,255,0.20);
+    --bg-panel: rgba(5,2,14,0.44); --border: rgba(255,255,255,0.07);
+  }
+  [data-theme="blue"] {
+    --accent: #1870ff; --accent2: #60a0ff;
+    --accent-glow: rgba(24,112,255,0.20);
+    --bg-panel: rgba(2,4,14,0.44); --border: rgba(255,255,255,0.07);
+  }
+  [data-theme="teal"] {
+    --accent: #00c8a0; --accent2: #40e8c8;
+    --accent-glow: rgba(0,200,160,0.20);
+    --bg-panel: rgba(0,7,6,0.44); --border: rgba(255,255,255,0.07);
+  }
+  [data-theme="green"] {
+    --accent: #00c855; --accent2: #40e880;
+    --accent-glow: rgba(0,200,85,0.20);
+    --bg-panel: rgba(0,7,3,0.44); --border: rgba(255,255,255,0.07);
+  }
+
+  /* Theme dots */
+  .theme-dots { display:flex; gap:5px; align-items:center; margin-right:4px; }
+  .theme-dot {
+    width:11px; height:11px; border-radius:50%; cursor:pointer;
+    border: 1.5px solid transparent;
+    transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+    flex-shrink:0;
+  }
+  .theme-dot[data-theme="mix"] {
+    background: conic-gradient(#ff5012, #ff2080, #8030ff, #1870ff, #00c8a0, #00c855, #ffcc00, #ff5012);
+  }
+  .theme-dot:hover { transform: scale(1.3); }
+  .theme-dot.active {
+    border-color: rgba(255,255,255,0.75);
+    box-shadow: 0 0 7px rgba(255,255,255,0.3);
+    transform: scale(1.15);
+  }
+
+  /* === SLEEP TIMER & QUEUE === */
+  #btn-sleep, #btn-queue {
+    width: 28px; height: 28px; opacity: 0.50;
+    transition: opacity 0.2s, color 0.2s;
+  }
+  #btn-sleep:hover, #btn-queue:hover { opacity: 0.85; }
+  #btn-sleep { position: relative; }
+  #btn-sleep.active, #btn-queue.active { opacity: 1; color: var(--accent); }
+  #btn-sleep.active { color: var(--accent); }
+  #sleep-indicator {
+    position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: var(--accent); white-space: nowrap;
+    pointer-events: none; display: none; font-weight: 700; letter-spacing: 0.01em;
+  }
+  #btn-sleep.active #sleep-indicator { display: block; }
+  #btn-visual {
+    width: 28px; height: 28px; opacity: 0.62;
+    color: rgba(255,255,255,0.74);
+    transition: opacity 0.2s, color 0.2s, filter 0.2s;
+  }
+  #btn-visual:hover,
+  #btn-visual.active {
+    opacity: 1;
+    color: var(--accent);
+    filter: drop-shadow(0 0 5px var(--accent, rgba(122,44,255,0.55)));
+  }
+
+  #visual-panel {
+    position: fixed;
+    right: 118px;
+    bottom: calc(var(--bar-h) + 18px);
+    padding: 4px;
+    background: rgba(5,1,10,0.93);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px;
+    z-index: 70;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.58);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+  }
+  #visual-panel.hidden { display: none; }
+  .visual-option {
+    height: 30px;
+    padding: 0 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255,255,255,0.45);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.18s, color 0.18s;
+    letter-spacing: 0.02em;
+  }
+  .visual-option:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.82); }
+  .visual-option.active {
+    background: rgba(100,50,200,0.22);
+    color: rgba(200,165,255,0.95);
+  }
+  .visual-option svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    opacity: 0.80;
+  }
+
+  /* === QUEUE PANEL === */
+  #queue-panel {
+    position: fixed;
+    bottom: calc(var(--bar-h) + 16px);
+    left: calc(var(--left-w) + 32px);
+    right: calc(var(--right-w) + 32px);
+    max-height: 340px;
+    background: rgba(6, 1, 0, 0.96);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border: 1px solid rgba(255, 80, 18, 0.22);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.55), 0 4px 24px rgba(0,0,0,0.4);
+  }
+  #queue-panel.hidden { transform: translateY(16px); opacity: 0; pointer-events: none; }
+  .queue-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 16px 9px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  }
+  .queue-header span { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.80); letter-spacing: 0.06em; text-transform: uppercase; }
+  #queue-close { background: none; border: none; color: rgba(255,255,255,0.30); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color 0.15s; }
+  #queue-close:hover { color: rgba(255,255,255,0.80); }
+  #queue-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+  #queue-list::-webkit-scrollbar { width: 3px; }
+  #queue-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
+  .queue-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 16px; cursor: pointer; transition: background 0.12s;
+  }
+  .queue-item:hover { background: rgba(255,255,255,0.04); }
+  .queue-item.current { background: rgba(255, 90, 18, 0.10); }
+  .queue-item .q-num { width: 22px; text-align: right; font-size: 11px; color: rgba(255,255,255,0.20); flex-shrink: 0; }
+  .queue-item.current .q-num { color: var(--accent); font-size: 9px; }
+  .queue-item .q-name { flex: 1; font-size: 12px; color: rgba(255,255,255,0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .queue-item.current .q-name { color: var(--accent2); font-weight: 500; }
+  .queue-item .q-artist { font-size: 11px; color: rgba(255,255,255,0.26); white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  .queue-item .q-dur { font-size: 11px; color: rgba(255,255,255,0.18); flex-shrink: 0; width: 34px; text-align: right; }
+
+  /* === LOADING SPINNER === */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .body-playing #right-album-art,
+    .spinner,
+    .eq-icon span,
+    .eq-bar {
+      animation: none !important;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :root {
+      --left-w: calc(100vw - 24px);
+      --right-w: calc(100vw - 24px);
+    }
+
+    #left-panel {
+      left: 12px;
+      right: 12px;
+      top: 12px;
+      bottom: auto;
+      width: auto;
+      height: 92px;
+    }
+
+    #search-wrap { padding: 12px; }
+    #panel-tabs,
+    #playlist-wrap,
+    #mylist-wrap { display: none !important; }
+
+    #right-panel {
+      left: 12px;
+      right: 12px;
+      top: 116px;
+      bottom: calc(var(--bar-h) + 24px);
+      width: auto;
+    }
+
+    #right-orbit-card { padding: 14px 16px 12px; }
+    #right-art-wrap { width: min(42vw, 150px); }
+    #right-song-title { font-size: 17px; padding-top: 12px; }
+    #right-song-artist { font-size: 9px; }
+    #right-metrics { padding: 8px 16px 10px; }
+    .lyric-line { padding-left: 16px; padding-right: 16px; }
+
+    #bottom-bar {
+      left: 12px;
+      right: 12px;
+      height: var(--bar-h);
+      padding: 0 10px;
+    }
+
+    .bar-song-info {
+      width: 98px;
+      gap: 8px;
+    }
+
+    #bar-art-wrap {
+      width: 40px !important;
+      height: 40px !important;
+      border-radius: 8px !important;
+    }
+
+    #bar-title { font-size: 12px; }
+    #bar-artist { font-size: 10px; }
+    .bar-center { padding: 0 8px; gap: 5px; }
+    .controls { gap: 12px; }
+    #btn-shuffle,
+    #btn-repeat { display: none; }
+    .progress-area { gap: 6px; font-size: 10px; }
+
+    .bar-right {
+      width: 96px;
+      gap: 6px;
+    }
+
+    .theme-dots,
+    .volume-wrap,
+    #btn-sleep { display: none; }
+  }
+
+  /* === TOAST === */
+  #toast {
+    position: fixed;
+    bottom: calc(var(--bar-h) + 20px);
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: rgba(18,5,0,0.92);
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 100;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* equalizer bars animation for active song */
+  .eq-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .eq-bar {
+    width: 3px;
+    background: var(--accent);
+    border-radius: 1px;
+    animation: eq-bounce 0.8s ease-in-out infinite alternate;
+  }
+
+  .eq-bar:nth-child(2) { animation-delay: 0.15s; }
+  .eq-bar:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes eq-bounce {
+    from { height: 3px; }
+    to { height: 14px; }
+  }
+
+  /* ── Login button ── */
+  #login-btn {
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.55);
+    font-size: 11px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  #login-btn:hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.9); }
+  #login-btn.logged-in { color: #4cde80; border-color: rgba(76,222,128,0.35); }
+
+  /* ── Panel tabs (搜索结果 / 我的歌单) ── */
+  #panel-tabs {
+    flex-shrink: 0;
+    padding: 6px 12px 0;
+    gap: 4px;
+    display: flex;
+  }
+  #panel-tabs.hidden { display: none !important; }
+  .panel-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    padding: 5px 0 6px;
+    cursor: pointer;
+    text-align: center;
+    letter-spacing: 0.04em;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .panel-tab:hover { color: rgba(255,255,255,0.7); }
+  .panel-tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  /* ── My playlists panel ── */
+  #mylist-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 8px;
+    display: none;
+  }
+  #mylist-wrap::-webkit-scrollbar { width: 4px; }
+  #mylist-wrap::-webkit-scrollbar-track { background: transparent; }
+  #mylist-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+  .my-playlist-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    border-radius: 6px;
+    margin: 1px 6px;
+    transition: background 0.15s;
+  }
+  .my-playlist-item:hover { background: rgba(255,255,255,0.06); }
+  .my-playlist-item.active { background: rgba(255,90,18,0.14); }
+  .my-playlist-item .pl-icon {
+    width: 32px; height: 32px; border-radius: 6px;
+    background: rgba(255,255,255,0.07);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: rgba(255,255,255,0.3); font-size: 13px;
+    overflow: hidden;
+  }
+  .my-playlist-item .pl-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .my-playlist-item .pl-info { flex: 1; min-width: 0; }
+  .my-playlist-item .pl-name {
+    font-size: 12px; color: rgba(255,255,255,0.82);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .my-playlist-item .pl-count { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 1px; }
+  #back-to-playlists {
+    display: none; align-items: center; gap: 6px;
+    padding: 8px 14px 4px;
+    font-size: 11px; color: rgba(255,90,18,0.8);
+    cursor: pointer; background: none; border: none;
+  }
+  #back-to-playlists:hover { color: #ff9a3d; }
+
+  /* ── Login modal ── */
+  #qr-modal {
+    position: fixed; inset: 0; z-index: 990;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(7px) saturate(140%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #qr-modal.hidden { display: none; }
+  #qr-box {
+    background: rgba(15,4,0,0.97);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 24px;
+    padding: 32px 40px 28px;
+    text-align: center;
+    width: 280px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+  }
+  #qr-box h3 { margin: 0 0 16px; font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); }
+  #qr-box p  { margin: 0 0 16px; font-size: 12px; color: rgba(255,255,255,0.4); }
+  /* Tab switcher */
+  .login-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .login-tab {
+    flex: 1; padding: 7px 0; font-size: 12px; font-weight: 500;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; color: rgba(255,255,255,0.45); cursor: pointer; transition: all 0.2s;
+  }
+  .login-tab.active {
+    background: rgba(255,90,18,0.18); border-color: rgba(255,90,18,0.45); color: #ff9a3d;
+  }
+  /* QR section */
+  #qr-img { width: 190px; height: 190px; border-radius: 14px; display: block; margin: 0 auto; }
+  #qr-status { margin: 14px 0 20px; font-size: 13px; color: rgba(255,255,255,0.55); min-height: 18px; }
+  /* Phone section */
+  #phone-section { display: none; }
+  .login-field {
+    width: 100%; padding: 10px 12px; margin-bottom: 10px; box-sizing: border-box;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 10px; color: rgba(255,255,255,0.9); font-size: 13px; outline: none;
+  }
+  .login-field:focus { border-color: rgba(255,90,18,0.55); }
+  .login-field::placeholder { color: rgba(255,255,255,0.28); }
+  #phone-submit {
+    width: 100%; padding: 10px; margin-top: 2px;
+    background: linear-gradient(to right, #8a1f00, #ff5a12);
+    border: none; border-radius: 10px; color: white;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+  }
+  #phone-submit:hover { opacity: 0.88; }
+  #phone-status { margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.45); min-height: 16px; }
+  /* Shared close button */
+  #qr-close {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; color: rgba(255,255,255,0.6); font-size: 13px;
+    padding: 8px 24px; cursor: pointer; transition: all 0.2s; margin-top: 8px;
+  }
+  #qr-close:hover { background: rgba(255,255,255,0.15); color: white; }
+
+  /* === MINI EQ === */
+  #right-metrics {
+    padding: 10px 20px 14px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mini-eq-bar {
+    height: 2px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .metric-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    opacity: 0.45;
+    border-radius: 1px;
+    transition: width 0.06s linear;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="three-canvas"></canvas>
+<canvas id="liquid-canvas"></canvas>
+<div id="bg-gradient"></div>
+
+<!-- LEFT PANEL -->
+<div class="panel" id="left-panel">
+  <div id="search-wrap">
+    <div class="search-input-wrap">
+      <span class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="5.5" r="4"/><line x1="9" y1="9" x2="13" y2="13"/></svg>
+      </span>
+      <input type="text" id="search-input" placeholder="搜索歌曲、歌手..." autocomplete="off" spellcheck="false">
+    </div>
+    <button id="login-btn" title="登录网易云账号可解锁更多歌曲">登录</button>
+  </div>
+  <div id="panel-tabs" class="hidden">
+    <button class="panel-tab active" id="tab-search">搜索结果</button>
+    <button class="panel-tab" id="tab-mylist">我的歌单</button>
+  </div>
+  <div id="playlist-wrap">
+    <div id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
+      <span>搜索你喜欢的音乐</span>
+    </div>
+  </div>
+  <div id="mylist-wrap">
+    <button id="back-to-playlists" style="display:none">← 返回歌单列表</button>
+  </div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div class="panel" id="right-panel">
+  <div id="right-orbit-card">
+    <div id="right-art-wrap">
+      <img id="right-album-art" src="" alt="" style="display:none">
+      <div id="right-art-placeholder">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="rgba(255,255,255,0.17)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
+      </div>
+    </div>
+    <div id="right-song-title">Music Planet</div>
+    <div id="right-song-artist">Idle Orbit</div>
+  </div>
+
+  <!-- Mini EQ -->
+  <div id="right-metrics">
+    <div class="mini-eq-bar"><div class="metric-bar" id="m-bass"></div></div>
+    <div class="mini-eq-bar"><div class="metric-bar" id="m-mid"></div></div>
+    <div class="mini-eq-bar"><div class="metric-bar" id="m-high"></div></div>
+    <div class="mini-eq-bar"><div class="metric-bar" id="m-energy"></div></div>
+    <span id="mv-bass" style="display:none"></span>
+    <span id="mv-mid" style="display:none"></span>
+    <span id="mv-high" style="display:none"></span>
+    <span id="mv-energy" style="display:none"></span>
+    <span id="beat-led" style="display:none"></span>
+  </div>
+
+  <div id="lyrics-wrap">
+    <div id="no-lyrics">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+      <span>暂无歌词</span>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="panel" id="bottom-bar">
+  <!-- Song info -->
+  <div class="bar-song-info">
+    <div id="bar-art-wrap" style="width:52px;height:52px;border-radius:10px;background:rgba(255,255,255,0.07);flex-shrink:0;position:relative;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+      <img id="bar-art" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;position:absolute;inset:0;">
+      <div id="bar-art-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.18)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
+      </div>
+    </div>
+    <div class="bar-titles">
+      <div id="bar-title">未播放</div>
+      <div id="bar-artist">—</div>
+    </div>
+  </div>
+
+  <!-- Center: controls + progress -->
+  <div class="bar-center">
+    <div class="controls">
+      <button class="ctrl-btn" id="btn-shuffle" title="随机播放">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      </button>
+      <button class="ctrl-btn" id="btn-prev" title="上一首">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h2v10H2zm2 5L12 2v10L4 7z"/></svg>
+      </button>
+      <button class="ctrl-btn" id="btn-play-pause" title="播放/暂停">
+        <svg id="icon-play" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
+        <svg id="icon-pause" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display:none"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>
+      </button>
+      <button class="ctrl-btn" id="btn-next" title="下一首">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M12 2h-2v10h2zm-2 5L2 2v10l8-5z"/></svg>
+      </button>
+      <button class="ctrl-btn" id="btn-repeat" title="循环模式">
+        <svg id="icon-repeat-all" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        <svg id="icon-repeat-one" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/><line x1="11" y1="9" x2="11" y2="15"/></svg>
+      </button>
+    </div>
+    <div class="progress-area">
+      <span id="time-current">0:00</span>
+      <div id="progress-bar-wrap">
+        <div class="progress-track">
+          <div id="progress-fill"></div>
+        </div>
+        <div id="progress-tooltip" class="hidden"></div>
+      </div>
+      <span id="time-total">0:00</span>
+    </div>
+  </div>
+
+  <!-- Right: theme + volume + like -->
+  <div class="bar-right">
+    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <span id="sleep-indicator"></span>
+    </button>
+    <div class="theme-dots">
+      <div class="theme-dot" data-theme="orange"  style="background:#ff5012" title="橙焰"></div>
+      <div class="theme-dot" data-theme="crimson" style="background:#ff1a3f" title="绯红"></div>
+      <div class="theme-dot" data-theme="rose"    style="background:#ff2080" title="玫瑰"></div>
+      <div class="theme-dot active" data-theme="violet"  style="background:#7A2CFF" title="紫罗兰"></div>
+      <div class="theme-dot" data-theme="blue"    style="background:#1870ff" title="钴蓝"></div>
+      <div class="theme-dot" data-theme="teal"    style="background:#00c8a0" title="青碧"></div>
+      <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
+      <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
+    </div>
+    <button class="ctrl-btn" id="btn-visual" title="视觉模式">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
+    </button>
+    <button class="ctrl-btn" id="btn-queue" title="播放队列">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    </button>
+    <div class="volume-wrap">
+      <svg class="vol-icon" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 5h2.5L8 2v10L4.5 9H2V5zm9-2.5a6 6 0 010 9M8.5 5a3 3 0 010 4"/></svg>
+      <input type="range" id="volume-slider" min="0" max="100" value="80">
+    </div>
+    <button class="ctrl-btn" id="btn-like" title="喜欢">
+      <svg id="icon-heart" width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
+      <svg id="icon-heart-filled" width="15" height="14" viewBox="0 0 15 14" fill="currentColor" style="display:none"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- VISUAL MODE PANEL -->
+<div id="visual-panel" class="hidden">
+  <button class="visual-option active" data-visual="planet">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
+    <span>星球</span>
+  </button>
+  <button class="visual-option" data-visual="liquidAura">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
+    <span>流光</span>
+  </button>
+</div>
+
+<!-- PLAY QUEUE PANEL -->
+<div id="queue-panel" class="hidden">
+  <div class="queue-header">
+    <span>播放队列</span>
+    <button id="queue-close">×</button>
+  </div>
+  <div id="queue-list"></div>
+</div>
+
+<div id="toast"></div>
+
+<!-- QR LOGIN MODAL -->
+<div id="qr-modal" class="hidden">
+  <div id="qr-box">
+    <h3>登录网易云音乐</h3>
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-qr">扫码登录</button>
+      <button class="login-tab" id="tab-phone">手机号登录</button>
+    </div>
+    <div id="qr-section">
+      <p>用手机 App 扫描二维码</p>
+      <img id="qr-img" src="" alt="QR Code">
+      <div id="qr-status">正在生成二维码...</div>
+    </div>
+    <div id="phone-section">
+      <p>输入网易云音乐账号密码</p>
+      <input class="login-field" id="phone-input" type="tel" placeholder="手机号">
+      <input class="login-field" id="password-input" type="password" placeholder="密码">
+      <button id="phone-submit">登 录</button>
+      <div id="phone-status"></div>
+    </div>
+    <button id="qr-close">取消</button>
+  </div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script type="module">
+// ===================================================================
+// THREE.JS IMPORTS
+// ===================================================================
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+// ===================================================================
+// SCENE SETUP
+// ===================================================================
+const canvas = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: true,
+  powerPreference: 'high-performance',
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.4));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x03050e, 1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.4;  // compensate for ACES darkening; keeps glow sphere vivid
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x060b18, 18, 55);
+
+const camera = new THREE.PerspectiveCamera(64, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 1.2, 4.2);
+camera.lookAt(0, 0.0, -1.5);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.4));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ===================================================================
+// SHADERS
+// ===================================================================
+const vertexShader = `
+  uniform float uTime;
+  uniform float uAudioLevel;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uHigh;
+  uniform float uBeatFlash;
+
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+
+  // 3D simplex-like noise (compact version)
+  vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec4 mod289(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+  float snoise(vec3 v) {
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = mod289(i);
+    vec4 p = permute(permute(permute(
+      i.z + vec4(0.0, i1.z, i2.z, 1.0))
+      + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+      + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0)*2.0 + 1.0;
+    vec4 s1 = floor(b1)*2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+    vec3 p0 = vec3(a0.xy,h.x);
+    vec3 p1 = vec3(a0.zw,h.y);
+    vec3 p2 = vec3(a1.xy,h.z);
+    vec3 p3 = vec3(a1.zw,h.w);
+    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+  }
+
+  void main() {
+    // World-space normal and position for correct Fresnel in fragment shader
+    vNormal = normalize(mat3(modelMatrix) * normal);
+
+    // Three octaves — time speed surges on beat for a "pulse through the skin" feel
+    float beatTimeBoost = 1.0 + uBeatFlash * 1.6;
+    // Domain warp: distort noise input with a low-freq sample; breaks icosahedron grid artifacts
+    float warpN = snoise(position * 0.65 + uTime * 0.035);
+    vec3 warpedPos = position + vec3(warpN * 0.16, warpN * -0.13, warpN * 0.11);
+    float n1 = snoise(warpedPos * 1.3 + uTime * 0.12 * beatTimeBoost);
+    float n2amp = 0.45 + uMid * 0.18;
+    float n2 = snoise(warpedPos * 2.2 - uTime * 0.07 * beatTimeBoost) * n2amp;
+    float n3 = snoise(warpedPos * 3.8 + uTime * 0.10) * (0.20 + uHigh * 0.14);
+    float noise = n1 + n2 + n3;
+
+    // Frequency topology: bass energy concentrated near poles, treble along equator
+    float poleAxis = abs(normalize(position).y);
+    float equAxis  = 1.0 - poleAxis;
+    float beatSwell = (snoise(position * 0.9 + uTime * 0.06) * 0.5 + 0.5) * uBeatFlash * 0.042;
+    // Wind drift — speed increases with audio energy for more animated surface in music
+    float windSpeed = 0.18 + uAudioLevel * 0.28 + uBass * 0.18;
+    float windAngle = uTime * 0.04 + uBass * 1.4;
+    float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.013
+                    + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.009;
+    float eqWave = equAxis * sin(position.x * 4.8 + uTime * (1.2 + uBass * 2.2)) * sin(position.z * 3.6 + uTime * (0.9 + uMid * 1.8)) * 0.012 * uMid;
+    float poleSurge = poleAxis * poleAxis * uBass * 0.055;
+    float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.035 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.025;
+    float displacement = noise * (0.09 + uBass * (0.10 + poleAxis * 0.07) + uMid * 0.05)
+                       + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.020 + equAxis * 0.025)
+                       + beatSwell + windDrift + eqWave + poleSurge + idleBreath;
+
+    vDisplacement = displacement;
+
+    // Q3 fix: pass DISPLACED world position so Fresnel uses actual surface point
+    vec3 displaced = position + normal * displacement;
+    vPosition = (modelMatrix * vec4(displaced, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  }
+`;
+
+const fragmentShader = `
+  uniform vec3 uColor1;
+  uniform vec3 uColor2;
+  uniform float uAudioLevel;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uHigh;
+  uniform float uBeatFlash;
+  uniform float uFlux;
+  uniform float uTime;
+
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+
+  float hash31(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float signedNdotV = dot(normalize(vNormal), viewDir);
+    float NdotV  = abs(signedNdotV);
+    // Fresnel width expands with bass/mid/beat — rim grows wider on heavy music
+    float fresnelExp = 3.5 - uBass * 0.9 - uMid * 0.30 - uHigh * 0.18 - uBeatFlash * 0.5;
+    float fresnel = pow(1.0 - NdotV, max(fresnelExp, 1.6));
+    float depthFade = clamp(signedNdotV * 2.5 + 1.0, 0.08, 1.0);
+    float edgeFactor = clamp(fresnel * (0.8 + uBass * 3.6 + uAudioLevel * 1.6 + uBeatFlash * 2.2), 0.0, 1.0);
+    float spikeFactor = clamp(vDisplacement * 1.1, 0.0, 1.0);
+    // Interior reacts to bass — more of uColor2 as energy rises
+    float baseBlend = 0.30 + uBass * 0.12 + uMid * 0.06 + uBeatFlash * 0.06;
+    vec3 col = mix(uColor1, uColor2, max(max(edgeFactor, spikeFactor), baseBlend));
+    // Color temperature — bass shifts cool-violet, treble stays bright
+    float tempBias = clamp((uBass - uHigh) * 1.5, -0.8, 0.8);
+    col *= mix(vec3(1.04, 1.00, 0.96), vec3(0.97, 0.99, 1.05), tempBias * 0.5 + 0.5);
+    // Back-face cool gradient — back hemisphere shifts slightly cooler
+    float backFactor = clamp(-signedNdotV, 0.0, 1.0);
+    col = mix(col, col * vec3(0.93, 0.97, 1.08), backFactor * 0.25);
+    float brightness = 0.78 + uAudioLevel * 0.18 + uBass * 0.22 + uMid * 0.08 + uBeatFlash * 0.28 + uFlux * 0.10;
+    col *= brightness;
+    // Subtle center vignette — darkens sphere center slightly for painted-sphere depth
+    col *= (1.0 - pow(NdotV, 4.5) * 0.07);
+    // Surface shimmer — animated light bands; frequency rises with audio energy
+    float shimFreq = 2.1 + uAudioLevel * 1.8 + uBass * 1.2;
+    float shimmer = sin(uTime * shimFreq + vPosition.y * 3.8 + vPosition.x * 2.6) * (0.03 + uAudioLevel * 0.02 + uHigh * 0.014 + uFlux * 0.016) + 1.0;
+    float shimmer2 = sin(uTime * (5.8 + uHigh * 3.2) + vPosition.z * 4.2 + vPosition.x * 1.8 + uBeatFlash * 1.6) * (0.014 + uHigh * 0.012) + 1.0;
+    col *= shimmer * shimmer2;
+    // Center highlight — facing surface catches ambient light regardless of audio
+    float centerBase = pow(NdotV, 5.5) * (0.07 + uMid * 0.04);
+    col += col * centerBase;
+    // Bass center pulse — inner hemisphere brightens on heavy bass hits
+    float centerPulse = pow(NdotV, 3.5) * uBass * 0.22;
+    col += col * centerPulse;
+    // Mid-frequency ring waves — scroll speed and phase surge with mid energy and beat
+    float ringSpeed = 3.2 + uMid * 4.0 + uBeatFlash * 6.0 + uFlux * 3.5;
+    float ringWave = sin(vPosition.y * 5.5 - uTime * ringSpeed + uBeatFlash * 2.8 + uFlux * 1.2) * 0.5 + 0.5;
+    col = mix(col, col * (1.0 + ringWave * 0.22) + (uColor2 - col) * ringWave * 0.06, uMid * 0.85);
+    // Second ring wave — perpendicular axis (X) at lower amplitude for cross-hatched shimmer
+    float ringWave2 = sin(vPosition.x * 4.2 - uTime * (2.8 + uBass * 3.5) + uBeatFlash * 1.4 + uFlux * 0.9) * 0.5 + 0.5;
+    col = mix(col, col * (1.0 + ringWave2 * 0.12), uMid * 0.35);
+    // Displacement tip — spike tips shift cooler/violet
+    float dispGlow = clamp(vDisplacement * 2.8, 0.0, 1.0);
+    col = mix(col, col * vec3(0.92, 0.96, 1.12), dispGlow * (0.25 + uBeatFlash * 0.10));
+    // Spike tip emission — highest displacement points emit cool violet like plasma jets
+    float spikeTip = smoothstep(0.72, 1.0, vDisplacement);
+    col += vec3(1.0, 0.7, 2.2) * spikeTip * (0.12 + uBass * 0.08 + uBeatFlash * 0.06) * depthFade;
+    // Spike tip saturation boost — extreme deformations bloom into vivid saturated color
+    float tipLuma = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, mix(vec3(tipLuma), col, 1.22), spikeTip * (0.28 + uBass * 0.18));
+    // Mid-frequency cool shift: mids push slightly violet
+    col = mix(col, col * vec3(0.95, 0.99, 1.08), uMid * 0.30);
+    // Treble cool accent: high frequencies add a touch of cool brightness
+    col = mix(col, col * vec3(0.96, 1.02, 1.10), uHigh * 0.30);
+    // Saturation boost proportional to bass — pull away from gray axis
+    float luma = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(luma), col, 1.0 + uBass * 0.28 + uBeatFlash * 0.12);
+    // Beat contrast boost — briefly deepens shadows and lifts highlights for punchy transients
+    float beatLuma = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, mix(vec3(beatLuma), col, 1.0 + uBeatFlash * 0.18), uBeatFlash * 0.55);
+    // Peak-beat global surge: brief full-sphere brightness pop at maximum beat impact
+    col *= 1.0 + smoothstep(0.42, 0.65, uBeatFlash) * 0.28;
+    // Altitude gradient — cool blue-white at crown, warm amber at base, like a planet atmosphere
+    float altitude = normalize(vPosition).y;
+    col = mix(col, col * vec3(0.89, 0.95, 1.16), smoothstep(0.25, 1.0, altitude) * 0.20);
+    col = mix(col, col * vec3(0.90, 0.95, 1.14), smoothstep(-0.25, -1.0, altitude) * 0.20);
+    // Latitudinal bands — slow-drifting horizontal stripes like gas-giant cloud belts
+    float band1 = sin(altitude * 6.0 + uTime * 0.14) * 0.5 + 0.5;
+    float band2 = sin(altitude * 10.5 - uTime * 0.09 + uBass * 1.5) * 0.5 + 0.5;
+    col = mix(col, col * (0.92 + band1 * 0.16) + uColor1 * band1 * 0.04, uMid * 0.35);
+    col = mix(col, col * (0.94 + band2 * 0.12) + uColor2 * band2 * 0.03, uBass * 0.28);
+    // Polar cap glow — top catches album secondary, base catches primary (like a two-tone planet)
+    float topCap = smoothstep(0.68, 1.0, altitude);
+    float botCap = smoothstep(-0.68, -1.0, altitude);
+    col += uColor2 * topCap * (0.14 + uBass * 0.10 + uBeatFlash * 0.08) * depthFade;
+    col += uColor1 * botCap * (0.11 + uMid * 0.08 + uBeatFlash * 0.06) * depthFade;
+    // Beat-driven pole burst — brief white flash at crown and base marks every hit
+    col += vec3(1.8, 1.7, 2.1) * topCap * uBeatFlash * 0.28 * depthFade;
+    col += vec3(1.4, 1.2, 2.2) * botCap * uBeatFlash * 0.18 * depthFade;
+    // Dual specular: warm key light above-right + cool fill light lower-left
+    vec3 lightDir = normalize(vec3(0.6, 1.4, 1.2));
+    float spec = pow(max(0.0, dot(reflect(-lightDir, normalize(vNormal)), viewDir)), 10.0);
+    // Cool violet specular, beats shift toward bright neutral
+    vec3 specColor = mix(vec3(0.8, 0.65, 1.3), vec3(1.3, 1.2, 1.5), uBeatFlash * 0.60);
+    col += specColor * spec * (0.18 + uBass * 0.20 + uBeatFlash * 0.15 + uFlux * 0.10);
+    // Rim light from key — back-lit silhouette edge catches warm key light
+    float rimLight = pow(max(0.0, 1.0 - dot(normalize(vNormal), lightDir)), 4.2);
+    col += uColor2 * rimLight * (0.09 + uBass * 0.07 + uBeatFlash * 0.05) * depthFade;
+    vec3 lightDir2 = normalize(vec3(-0.7, 0.4, 0.8));
+    float spec2 = pow(max(0.0, dot(reflect(-lightDir2, normalize(vNormal)), viewDir)), 18.0);
+    col += vec3(0.65, 0.80, 1.20) * spec2 * (0.12 + uHigh * 0.18);
+    // Up-light from below — stage footlight feel; uses album primary color
+    vec3 lightDir3 = normalize(vec3(0.0, -1.2, 0.8));
+    float spec3 = pow(max(0.0, dot(reflect(-lightDir3, normalize(vNormal)), viewDir)), 22.0);
+    col += uColor1 * spec3 * (0.07 + uMid * 0.08 + uBeatFlash * 0.06);
+    // Gloss highlight — overhead environment reflection, strongest at center top
+    float gloss = pow(max(0.0, dot(viewDir, vec3(0.0, 1.0, 0.5))), 18.0) * (0.5 + uAudioLevel * 0.4);
+    vec3 glossCol = mix(vec3(0.88, 0.93, 1.0), vec3(0.90, 0.92, 1.0), uBass * 0.55);
+    col += glossCol * gloss * 0.09;
+    // Brushed metal tangent shimmer — anisotropic highlight across surface latitude lines
+    vec3 tangent = normalize(cross(normalize(vNormal), vec3(0.0, 1.0, 0.0001)));
+    float brushed = pow(abs(dot(tangent, viewDir)), 3.5) * (0.5 + uBass * 0.4 + uBeatFlash * 0.3);
+    col += vec3(0.92, 0.96, 1.0) * brushed * 0.07;
+    // Equatorial atmosphere belt — mid-frequency luminance band hugging the equator
+    float equatorBelt = pow(1.0 - abs(normalize(vPosition).y), 5.0);
+    col += uColor2 * equatorBelt * (0.07 + uMid * 0.09 + uBass * 0.06 + uFlux * 0.07) * depthFade;
+    // Micro surface cells — fine hash pattern adds tactile detail to surface texture
+    float cellHash = hash31(floor(vPosition * 26.0));
+    col += col * step(0.90, cellHash) * (0.025 + uHigh * 0.035);
+    // Core swell — front-facing center blooms with album secondary color on heavy bass
+    float coreSwell = pow(NdotV, 1.8) * uBass * uBass * 0.28;
+    col += uColor2 * coreSwell * depthFade;
+    // Diagonal surface flow — interference pattern of two sinusoids creates flowing swirl
+    float flow = sin(vPosition.x * 3.2 + altitude * 7.0 + uTime * 0.35) * cos(vPosition.z * 2.8 - altitude * 5.5 - uTime * 0.28);
+    col = mix(col, col + uColor2 * 0.10, (flow * 0.5 + 0.5) * uMid * 0.20);
+    // UV triplet — three-way interference gives Moire-like surface texture
+    float uv3 = sin(vPosition.x * 5.2 + uTime * 1.1 + uBass * 2.8)
+              * sin(vPosition.y * 4.0 - uTime * 0.75 + uMid * 2.0)
+              * sin(vPosition.z * 3.8 + uTime * 0.6 + uHigh * 1.5);
+    col = mix(col, col + uColor1 * 0.08, (uv3 * 0.5 + 0.5) * uBass * 0.22);
+    // Torus-knot surface pattern — p=2,q=3 frequency mix responds to high-freq content
+    float tkPat = sin(vPosition.x * 2.0 + uTime * 0.20 + uBass * 1.2)
+                * cos(vPosition.y * 3.0 - uTime * 0.15 + uMid * 1.0)
+                * sin(vPosition.z * 2.5 + uTime * 0.10 + uHigh * 1.4);
+    col = mix(col, col + uColor1 * 0.10, (tkPat * 0.5 + 0.5) * uHigh * 0.22);
+    // Pressure ripple — displacement-modulated expanding rings visible on beat
+    float pRipple = sin(vDisplacement * 18.0 - uTime * 8.5 + uBeatFlash * 11.0) * 0.5 + 0.5;
+    float pRippleGate = smoothstep(0.55, 0.88, pRipple) * uBeatFlash;
+    col += uColor2 * pRippleGate * (0.18 + uBass * 0.08) * depthFade;
+    // Subsurface scatter simulation — sphere edges glow with album color as if back-lit
+    float backLight = clamp(1.0 - dot(normalize(vNormal), lightDir), 0.0, 1.0);
+    float sss = pow(backLight * (1.0 - NdotV * 0.7), 2.2);
+    col = mix(col, uColor2 * 1.0, sss * (0.08 + uBass * 0.05 + uMid * 0.03 + uBeatFlash * 0.04 + uFlux * 0.04));
+    // Secondary SSS — warm up-light scattering through the sphere base gives dual-lit depth
+    float backLight2 = clamp(1.0 - dot(normalize(vNormal), lightDir3), 0.0, 1.0);
+    float sss2 = pow(backLight2 * (1.0 - NdotV * 0.6), 2.5);
+    col = mix(col, uColor1 * 1.5, sss2 * (0.06 + uMid * 0.04 + uBeatFlash * 0.03));
+    // Violet shimmer — bass-driven chromatic shift along Y axis
+    float heatShift = sin(vPosition.y * 8.0 + uTime * 4.5 + uBass * 2.8) * 0.008 * uBass;
+    col.b += heatShift;
+    col.r -= heatShift * 0.35;
+    // Surface veins — displacement-modulated lines give skin-like organic texture
+    float veinEdge = 0.94 - uMid * 0.06 - uBass * 0.04; // narrower/sharper veins on heavy sections
+    float veinFactor = smoothstep(0.78, veinEdge, abs(sin(vDisplacement * 11.0 + uTime * 0.25 + uBass * 2.2)));
+    col += uColor1 * veinFactor * (0.07 + uMid * 0.08 + uBass * 0.06 + uFlux * 0.07) * depthFade;
+    // Second vein layer — finer scale responds to high-frequency shimmer
+    float veinEdge2 = 0.96 - uHigh * 0.05;
+    float veinFactor2 = smoothstep(0.84, veinEdge2, abs(sin(vDisplacement * 21.0 + uTime * 0.38 + uHigh * 1.8)));
+    col += uColor2 * veinFactor2 * (0.04 + uHigh * 0.055) * depthFade;
+    // High-frequency surface sparkle — density and intensity increase on strong beats
+    float sparkleThresh = 0.970 - uBeatFlash * 0.025 - uHigh * 0.015;
+    float sparkle = step(sparkleThresh, hash31(floor(vPosition * 14.0 + vec3(uTime * 0.15, uTime * 0.28, uTime * 0.10)))) * uHigh * uHigh;
+    vec3 sparkleCol = mix(vec3(1.2, 1.1, 1.6), uColor2 * 2.0, 0.45);
+    col += sparkleCol * sparkle * (0.28 + uBeatFlash * 0.22) * depthFade;
+    // Secondary sparkle — coarser scale, mid-frequency driven, adds glitter-ball texture
+    float sparkleThresh2 = 0.958 - uBeatFlash * 0.018 - uMid * 0.014;
+    float sparkle2 = step(sparkleThresh2, hash31(floor(vPosition * 7.0 + vec3(uTime * 0.08, uTime * 0.14, uTime * 0.06)))) * uMid * uMid;
+    col += mix(vec3(0.9, 0.8, 1.5), uColor1 * 1.8, 0.5) * sparkle2 * (0.14 + uBeatFlash * 0.10) * depthFade;
+    // Polar aurora — wavy chromatic bands near poles, respond to high-frequency content
+    float auroraLat = smoothstep(0.58, 0.84, abs(altitude));
+    float aurora = (sin(vPosition.x * 4.2 + uTime * 0.9) * 0.5 + 0.5) * (sin(vPosition.z * 3.5 + uTime * 0.6) * 0.5 + 0.5);
+    float auroraPhase = uTime * 0.28 + uHigh * 2.5;
+    vec3 auroraCol = vec3(sin(auroraPhase)*0.5+0.5, sin(auroraPhase+2.094)*0.5+0.5, sin(auroraPhase+4.189)*0.5+0.5);
+    col = mix(col, col + auroraCol * (0.10 + uBass * 0.05), auroraLat * aurora * (0.06 + uHigh * 0.10) * depthFade);
+    // Thin-film iridescence — rainbow shimmer at Fresnel edges, cycles gently with time
+    float iridPhase = NdotV * 2.8 + uTime * (0.06 + uBeatFlash * 0.28 + uFlux * 0.18);
+    vec3 iridCol = vec3(sin(iridPhase) * 0.5 + 0.5, sin(iridPhase + 2.094) * 0.5 + 0.5, sin(iridPhase + 4.189) * 0.5 + 0.5);
+    col = mix(col, col + iridCol * 0.12, fresnel * (0.05 + uBass * 0.03 + uBeatFlash * 0.03 + uFlux * 0.04));
+    // Second iridescence layer — finer scale, high-frequency response
+    float iridPhase2 = NdotV * 5.5 + uTime * 0.14 + uBeatFlash * 2.8;
+    vec3 iridCol2 = vec3(sin(iridPhase2)*0.5+0.5, sin(iridPhase2+2.094)*0.5+0.5, sin(iridPhase2+4.189)*0.5+0.5);
+    col = mix(col, col + iridCol2 * 0.07, fresnel * (0.02 + uHigh * 0.04 + uBeatFlash * 0.04 + uFlux * 0.03));
+    // Violet fringe — animated violet shift at silhouette
+    float fringePhase = uTime * 0.8 + uBeatFlash * 2.0;
+    float fringe = smoothstep(0.55, 0.90, fresnel) * (0.3 + uBass * 0.3 + uFlux * 0.4);
+    col.b += fringe * (0.10 + sin(fringePhase) * 0.04);
+    col.r -= fringe * (0.06 + cos(fringePhase * 1.3) * 0.02);
+    col.g += fringe * (0.02 + sin(fringePhase * 0.7 + 1.2) * 0.01);
+
+    // White-hot corona — extreme silhouette rim bleeds toward hot white for sun-like glow
+    float hotRim = pow(fresnel, 4.2) * (0.5 + uBass * 0.6 + uBeatFlash * 0.9 + uFlux * 0.5);
+    // Corona color: deep violet at rest, shifts to bright violet on beat
+    vec3 coronaColor = mix(vec3(1.3, 1.1, 2.2), vec3(1.6, 1.5, 2.4), uBeatFlash * 0.55);
+    col = mix(col, coronaColor, clamp(hotRim * 0.38, 0.0, 0.45));
+    // Audio transient flash — brief silhouette flare on sudden onset (flux)
+    col *= 1.0 + uFlux * 0.32 * (1.0 - NdotV * 0.55);
+    // Electrical arc on beat — bright horizontal bands surge at silhouette on strong beats
+    float arc = pow(sin(vPosition.y * 11.0 + uTime * 14.0) * 0.5 + 0.5, 3.0);
+    col += vec3(0.8, 0.7, 1.9) * arc * (uBeatFlash * uBeatFlash * 0.28 + uHigh * uHigh * 0.07) * (1.0 - NdotV);
+    // Cool treble arc — diagonal bands at X-axis; responds to high-frequency content
+    float arc2 = pow(sin(vPosition.x * 8.5 + uTime * 10.5 + uHigh * 4.5) * 0.5 + 0.5, 4.0);
+    col += vec3(0.9, 1.3, 2.1) * arc2 * uHigh * uHigh * 0.16 * (1.0 - NdotV) * depthFade;
+    // Rim impact flash on beat — violet pulse, not white
+    col = mix(col, vec3(1.2, 1.0, 2.2), uBeatFlash * edgeFactor * 0.18);
+    // Z-depth fog — front of sphere (higher Z) brighter, enhances rotation depth
+    float zFog = 0.80 + clamp(vPosition.z / 1.5, 0.0, 0.20);
+    // Subtle alpha pulse — wireframe lines breathe gently, ±3% transparency variation
+    float alphaPulse = sin(uTime * (1.15 + uBass * 0.75) + vPosition.x * 1.8) * (0.03 + uBass * 0.018) + 1.0;
+    float rimAlpha = pow(1.0 - NdotV, 2.8) * (0.12 + uBass * 0.08 + uBeatFlash * 0.06);
+    float alpha = (0.28 + uAudioLevel * 0.06 + fresnel * 0.68 + uBass * 0.08 + uMid * 0.03 + uHigh * 0.04 + uBeatFlash * 0.15 + spikeFactor * 0.10 + sparkle * 0.25 + spikeTip * 0.12 + rimAlpha) * depthFade * zFog * alphaPulse;
+    // Cross-spectrum color lean — bass pulls toward primary, treble pulls toward secondary
+    col = mix(col, col * uColor1 * 1.15, uBass * (1.0 - uHigh) * 0.12);
+    col = mix(col, col * uColor2 * 1.15, uHigh * (1.0 - uBass) * 0.10);
+    // Depth warmth — near geometry gets a subtle warm tint like incandescent stage light
+    float zTint = clamp(vPosition.z / 1.4, 0.0, 1.0);
+    col = mix(col, col * vec3(1.05, 1.02, 0.94), zTint * 0.14);
+    // Beat sawtooth sweep — sharp brightness wave races outward from sphere center on beat
+    float sawTime = fract(uTime * 0.5 + uBeatFlash * 0.9);
+    float sawSweep = (1.0 - sawTime) * uBeatFlash * 0.20 * (1.0 - NdotV * 0.4) * depthFade;
+    col += uColor2 * sawSweep;
+    // Subtle film grain — organic texture reminiscent of vinyl/analog media
+    float grain = fract(sin(dot(gl_FragCoord.xy + uTime * 131.7, vec2(12.9898, 78.233))) * 43758.5453);
+    col += (grain - 0.5) * 0.016;
+    gl_FragColor = vec4(clamp(col, 0.0, 2.2), clamp(alpha, 0.0, 0.98));
+  }
+`;
+
+// ===================================================================
+// SPHERE MESH
+// ===================================================================
+const sphereGeo = new THREE.IcosahedronGeometry(0.90, 2);
+const sphereMat = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms: {
+    uTime:       { value: 0 },
+    uAudioLevel: { value: 0 },
+    uBass:       { value: 0 },
+    uMid:        { value: 0 },
+    uHigh:       { value: 0 },
+    uColor1:     { value: new THREE.Color(0x2A0B3D) },
+    uColor2:     { value: new THREE.Color(0x7A2CFF) },
+    uBeatFlash:  { value: 0 },
+    uFlux:       { value: 0 },
+  },
+  wireframe: true,
+  transparent: true,
+  blending: THREE.NormalBlending,
+  depthWrite: false,
+});
+const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+sphere.position.set(0, 0.1, 0);
+sphere.renderOrder = 1;
+scene.add(sphere);
+
+// ── Fake bloom: two additive wireframe passes at +0.8% and +2% scale ─────────
+// Each pass shares uniforms with sphereMat (same deformation, auto-synced),
+// but renders AdditiveBlending with pure edge-only alpha → neon tube glow illusion.
+const glowWireFragShader = `
+  uniform vec3 uColor1;
+  uniform vec3 uColor2;
+  uniform float uAudioLevel;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uHigh;
+  uniform float uBeatFlash;
+  uniform float uFlux;
+  uniform float uTime;
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float signedNdotV = dot(normalize(vNormal), viewDir);
+    float NdotV  = abs(signedNdotV);
+    float depthFade = clamp(signedNdotV * 2.5 + 1.0, 0.12, 1.0);
+    float fresnel = pow(1.0 - NdotV, max(2.8 - uBass * 0.7 - uBeatFlash * 0.4, 1.6));
+    float edgeFactor = clamp(fresnel * (1.0 + uBass * 3.2 + uAudioLevel * 1.4 + uBeatFlash * 2.0), 0.0, 1.0);
+    float spikeFactor = clamp(vDisplacement * 1.0, 0.0, 1.0);
+    vec3 col = mix(uColor1, uColor2, max(max(edgeFactor, spikeFactor * 0.7), 0.25));
+    float gwB = pow(max(uBass, 0.0), 0.75); float gwF = pow(max(uBeatFlash, 0.0), 0.80);
+    float gwEnergy = uAudioLevel * 0.90 + gwB * 1.35 + uMid * 0.55 + gwF * 1.55 + uFlux * 1.10;
+    col *= 0.80 + 0.90 * tanh(gwEnergy / 2.20);
+    float shimmer = sin(uTime * (2.1 + uBass * 2.5) + vPosition.y * 3.8 + vPosition.x * 2.6) * (0.022 + uAudioLevel * 0.018 + uBeatFlash * 0.022) + 1.0;
+    col *= shimmer;
+    float alpha = (0.11 + fresnel * (0.30 + uFlux * 0.10) + spikeFactor * 0.13 + uBass * 0.08 + uMid * 0.04 + uBeatFlash * 0.18) * depthFade;
+    gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.88));
+  }
+`;
+const outerGlowWireFragShader = `
+  uniform vec3 uColor1;
+  uniform vec3 uColor2;
+  uniform float uAudioLevel;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uHigh;
+  uniform float uBeatFlash;
+  uniform float uFlux;
+  uniform float uTime;
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float signedNdotV = dot(normalize(vNormal), viewDir);
+    float NdotV  = abs(signedNdotV);
+    float depthFade = clamp(signedNdotV * 2.5 + 1.0, 0.15, 1.0);
+    float fresnel = pow(1.0 - NdotV, max(2.2 - uBass * 0.5 - uBeatFlash * 0.3, 1.4));
+    float edgeFactor = clamp(fresnel * (0.8 + uBass * 2.4 + uAudioLevel * 1.0 + uBeatFlash * 1.6), 0.0, 1.0);
+    float spikeFactor = clamp(vDisplacement * 0.7, 0.0, 1.0);
+    vec3 col = mix(uColor1, uColor2, max(max(edgeFactor, spikeFactor * 0.5), 0.12));
+    float owEnergy = uAudioLevel * 0.70 + uBass * 1.20 + uMid * 0.45 + uBeatFlash * 1.40 + uFlux * 0.90;
+    col *= 0.60 + 0.80 * tanh(owEnergy / 2.00);
+    float shimmer = sin(uTime * 2.1 + vPosition.y * 3.8 + vPosition.x * 2.6) * 0.015 + 1.0;
+    col *= shimmer;
+    float alpha = (0.07 + fresnel * (0.16 + uFlux * 0.07) + spikeFactor * 0.07 + uBass * 0.04 + uMid * 0.02 + uBeatFlash * 0.10) * depthFade;
+    gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.55));
+  }
+`;
+const glowMat1 = new THREE.ShaderMaterial({
+  vertexShader, fragmentShader: glowWireFragShader,
+  uniforms: sphereMat.uniforms,
+  wireframe: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const glowSphere1 = new THREE.Mesh(sphereGeo, glowMat1);
+glowSphere1.scale.setScalar(1.008);
+glowSphere1.renderOrder = 2;
+sphere.add(glowSphere1);
+
+const glowMat2 = new THREE.ShaderMaterial({
+  vertexShader, fragmentShader: outerGlowWireFragShader,
+  uniforms: sphereMat.uniforms,
+  wireframe: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const glowSphere2 = new THREE.Mesh(sphereGeo, glowMat2);
+glowSphere2.scale.setScalar(1.022);
+glowSphere2.renderOrder = 3;
+sphere.add(glowSphere2);
+
+// ── Dual-layer glow: solid NormalBlending core + faint AdditiveBlending halo ──
+// Core: bounded bright sun with no alpha bleed; Halo: subtle warmth, alpha≤0.14
+const glowVertShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  void main() {
+    vNormal  = normalize(normalMatrix * normal);
+    vViewPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+// Core fragment: steep alpha ramp (0→0.15) → sharp solid edge; NormalBlending keeps it bounded
+const coreFragShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  uniform float uIntensity;
+  uniform vec3 uGlowColor;
+  void main() {
+    vec3 viewDir = normalize(-vViewPos);
+    float VdotN  = max(0.0, dot(viewDir, vNormal));
+    float t = pow(VdotN, 6.0);
+    vec3 color = uGlowColor * 2.2;
+    float alpha = t * 0.10 * uIntensity;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+const haloFragShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  uniform float uIntensity;
+  uniform vec3 uGlowColor;
+  void main() {
+    vec3 viewDir = normalize(-vViewPos);
+    float VdotN  = max(0.0, dot(viewDir, vNormal));
+    // Fresnel rim: glow only at sphere silhouette edge, not filled disc
+    float rim = pow(1.0 - VdotN, 3.5);
+    float alpha = rim * 0.28 * uIntensity;
+    gl_FragColor = vec4(uGlowColor, alpha);
+  }
+`;
+const coreMat = new THREE.ShaderMaterial({ // color updated by applyEnvColor on theme change
+  vertexShader: glowVertShader,
+  fragmentShader: coreFragShader,
+  uniforms: { uIntensity: { value: 1.0 }, uGlowColor: { value: new THREE.Color(0x3a1280) } },
+  transparent: true, side: THREE.FrontSide,
+  depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.58, 24, 24), coreMat);
+coreSphere.position.set(0, 0.1, 0);
+coreSphere.renderOrder = 0;
+scene.add(coreSphere);
+// haloSphere and outerAuraSphere removed — any separate sphere in a dark void
+// creates a visible filled disc silhouette. The wireframe Fresnel edge glow is
+// the premium visual; coreSphere provides subtle inner warmth only.
+const haloMat = new THREE.ShaderMaterial({
+  vertexShader: glowVertShader,
+  fragmentShader: haloFragShader,
+  uniforms: { uIntensity: { value: 1.0 }, uGlowColor: { value: new THREE.Color(0x3a1280) } },
+  transparent: true, side: THREE.FrontSide,
+  depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const outerAuraMat = haloMat; // alias so applyEnvColor references stay valid
+
+// Thin orbital rings make the center read as a music planet without adding post-processing.
+const orbitGroup = new THREE.Group();
+orbitGroup.position.copy(sphere.position);
+
+function makeOrbitRing(radius, tube, color, opacity, rotation) {
+  const geo = new THREE.TorusGeometry(radius, tube, 8, 90);
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const ring = new THREE.Mesh(geo, mat);
+  ring.rotation.set(rotation[0], rotation[1], rotation[2]);
+  ring.renderOrder = 4;
+  ring.userData.baseOpacity = opacity;
+  orbitGroup.add(ring);
+  return ring;
+}
+
+const orbitRings = [
+  makeOrbitRing(1.05, 0.030, 0x88aaff, 0.60, [0.30, 0.55, -0.10]),
+  makeOrbitRing(1.22, 0.020, 0xaaccff, 0.78, [0.72, 0.28, 0.18]),
+  makeOrbitRing(1.46, 0.012, 0x6688dd, 0.44, [1.10, -0.36, -0.22]),
+  makeOrbitRing(1.52, 0.007, 0xccddff, 0.28, [1.38, 0.62, 0.34]),
+  makeOrbitRing(1.80, 0.004, 0xe8eeff, 0.18, [0.55, -0.80, 0.42]),
+];
+orbitGroup.visible = false;
+
+// ── Audio comet satellites ────────────────────────────────────────────────
+// Lightweight 3D animation layer: small emissive satellites ride slanted
+// orbital paths and leave short trails that flare on bass/beat transients.
+const cometGroup = new THREE.Group();
+cometGroup.position.copy(sphere.position);
+cometGroup.rotation.set(0.24, -0.32, 0.18);
+const cometHeadGeo = new THREE.SphereGeometry(0.030, 10, 10);
+const cometTailPoints = 18;
+const cometHeadMats = [];
+const cometTailMats = [];
+const audioComets = Array.from({ length: 5 }, (_, i) => {
+  const headMat = new THREE.MeshBasicMaterial({
+    color: 0x7a3cff,
+    transparent: true,
+    opacity: 0.84,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const head = new THREE.Mesh(cometHeadGeo, headMat);
+  head.renderOrder = 6;
+  cometGroup.add(head);
+  cometHeadMats.push(headMat);
+
+  const tailGeo = new THREE.BufferGeometry();
+  const tailPos = new Float32Array(cometTailPoints * 3);
+  tailGeo.setAttribute('position', new THREE.BufferAttribute(tailPos, 3));
+  const tailMat = new THREE.LineBasicMaterial({
+    color: 0x7a3cff,
+    transparent: true,
+    opacity: 0.28,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const tail = new THREE.Line(tailGeo, tailMat);
+  tail.renderOrder = 5;
+  cometGroup.add(tail);
+  cometTailMats.push(tailMat);
+
+  return {
+    head,
+    headMat,
+    tail,
+    tailGeo,
+    tailPos,
+    radius: 1.18 + i * 0.13,
+    yAmp: 0.22 + i * 0.035,
+    speed: 0.54 + i * 0.11,
+    phase: i * 1.2566,
+    tilt: 0.18 + i * 0.17,
+  };
+});
+cometGroup.visible = false;
+const _cometColor = new THREE.Color(0x7a3cff);
+
+// ===================================================================
+// PARTICLE FIELD
+// ===================================================================
+// Soft radial glow sprite — makes points appear as orbs, not squares
+const _ptCanvas = document.createElement('canvas');
+_ptCanvas.width = _ptCanvas.height = 32;
+const _ptCtx = _ptCanvas.getContext('2d');
+const _ptGrad = _ptCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+_ptGrad.addColorStop(0,    'rgba(255,255,255,1.0)');
+_ptGrad.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+_ptGrad.addColorStop(0.7,  'rgba(255,255,255,0.15)');
+_ptGrad.addColorStop(1.0,  'rgba(255,255,255,0.0)');
+_ptCtx.fillStyle = _ptGrad;
+_ptCtx.fillRect(0, 0, 32, 32);
+const pointSprite = new THREE.CanvasTexture(_ptCanvas);
+
+// ── Deep star field — distant stars at r=20-50 ──
+const starCount = 1800;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const r = 22 + Math.random() * 28;
+  const th = Math.random() * Math.PI * 2;
+  const ph = Math.acos(2 * Math.random() - 1);
+  starPos[i*3]   = r * Math.sin(ph) * Math.cos(th);
+  starPos[i*3+1] = r * Math.sin(ph) * Math.sin(th);
+  starPos[i*3+2] = r * Math.cos(ph);
+}
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({
+  color: 0xe8f0ff, size: 0.05, transparent: true, opacity: 0.55,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+});
+const starField = new THREE.Points(starGeo, starMat);
+scene.add(starField);
+
+const particleCount = 400;
+const positions = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
+  const r = 5 + Math.random() * 6;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+  positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  positions[i * 3 + 2] = r * Math.cos(phi);
+}
+const particleGeo = new THREE.BufferGeometry();
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+// BASELINE: fixed muted purple — applyEnvColor must NOT set this color; no render-loop lerp toward theme
+const particleMat = new THREE.PointsMaterial({
+  color: 0x5048b0,
+  size: 0.014,
+  map: pointSprite,
+  transparent: true,
+  opacity: 0.06,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  sizeAttenuation: true,
+});
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// ── Selectable visual modes: particle wave + spectrum columns ─────────────
+const waveCols = 36;
+const waveRows = 22;
+const waveCount = waveCols * waveRows;
+const waveBase = new Float32Array(waveCount * 3);
+const wavePos = new Float32Array(waveCount * 3);
+for (let y = 0; y < waveRows; y++) {
+  for (let x = 0; x < waveCols; x++) {
+    const i = y * waveCols + x;
+    const px = (x / (waveCols - 1) - 0.5) * 5.4;
+    const pz = (y / (waveRows - 1) - 0.5) * 3.4;
+    waveBase[i * 3] = px;
+    waveBase[i * 3 + 1] = -0.58;
+    waveBase[i * 3 + 2] = pz - 0.30;
+    wavePos[i * 3] = px;
+    wavePos[i * 3 + 1] = -0.58;
+    wavePos[i * 3 + 2] = pz - 0.30;
+  }
+}
+const waveGeo = new THREE.BufferGeometry();
+waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePos, 3));
+const waveMat = new THREE.PointsMaterial({
+  color: 0x6622cc,
+  size: 0.026,
+  map: pointSprite,
+  transparent: true,
+  opacity: 0.0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: false,
+  sizeAttenuation: true,
+});
+const waveField = new THREE.Points(waveGeo, waveMat);
+waveField.rotation.x = -0.58;
+waveField.rotation.z = 0.08;
+waveField.renderOrder = 2;
+waveField.visible = false;
+scene.add(waveField);
+
+const barCount = 48;
+const barGeo = new THREE.BoxGeometry(0.045, 1.0, 0.045);
+const barMat = new THREE.MeshBasicMaterial({
+  color: 0x6622cc,
+  transparent: true,
+  opacity: 0.0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: false,
+});
+const spectrumBars = new THREE.InstancedMesh(barGeo, barMat, barCount);
+spectrumBars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+spectrumBars.position.set(0, -1.03, -0.22);
+spectrumBars.rotation.x = -0.20;
+spectrumBars.renderOrder = 2;
+spectrumBars.visible = false;
+scene.add(spectrumBars);
+const _barDummy = new THREE.Object3D();
+
+// Near-sphere halo — tight cloud at r=1.4-2.5, reacts intensely to audio
+const haloParticleCount = 140;
+const haloPositions = new Float32Array(haloParticleCount * 3);
+for (let i = 0; i < haloParticleCount; i++) {
+  const r = 1.9 + Math.random() * 0.8;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  haloPositions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+  haloPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  haloPositions[i * 3 + 2] = r * Math.cos(phi);
+}
+const haloGeo = new THREE.BufferGeometry();
+haloGeo.setAttribute('position', new THREE.BufferAttribute(haloPositions, 3));
+const haloMat2 = new THREE.PointsMaterial({
+  color: 0x5040a8, size: 0.018, map: pointSprite,
+  transparent: true, opacity: 0.12,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+});
+const haloParticles = new THREE.Points(haloGeo, haloMat2);
+haloParticles.position.copy(sphere.position);
+scene.add(haloParticles);
+
+// ── Particle Nebula Swarm ──────────────────────────────────────────────────
+// Curl-noise driven particle cloud orbiting the planet.
+// Color flows with album palette; bass drives radial breathing; highs drive twinkle.
+const nebulaCount = 300;
+const _nbPos   = new Float32Array(nebulaCount * 3);
+const _nbSeed  = new Float32Array(nebulaCount * 3);
+const _nbScale = new Float32Array(nebulaCount);
+const _nbPhase = new Float32Array(nebulaCount);
+for (let i = 0; i < nebulaCount; i++) {
+  const r     = 1.55 + Math.pow(Math.random(), 1.6) * 1.85; // denser core, sparse fringe r=1.55-3.4
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2.0 * Math.random() - 1.0);
+  _nbPos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  _nbPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  _nbPos[i*3+2] = r * Math.cos(phi);
+  _nbSeed[i*3]   = Math.random() * 10.0 - 5.0;
+  _nbSeed[i*3+1] = Math.random() * 10.0 - 5.0;
+  _nbSeed[i*3+2] = Math.random() * 10.0 - 5.0;
+  _nbScale[i] = 0.55 + Math.random() * 0.9;
+  _nbPhase[i] = Math.random();
+}
+const nebulaGeo = new THREE.BufferGeometry();
+nebulaGeo.setAttribute('position', new THREE.BufferAttribute(_nbPos, 3));
+nebulaGeo.setAttribute('aSeed',  new THREE.BufferAttribute(_nbSeed, 3));
+nebulaGeo.setAttribute('aScale', new THREE.BufferAttribute(_nbScale, 1));
+nebulaGeo.setAttribute('aPhase', new THREE.BufferAttribute(_nbPhase, 1));
+
+// No custom attributes — derive per-particle variation from position hash.
+// Removes potential attribute-binding issue as a diagnostic step.
+const nebulaVertShader = `
+  attribute vec3  aSeed;
+  attribute float aScale;
+  attribute float aPhase;
+
+  uniform float uTime;
+  uniform float uAudioLevel;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uHigh;
+  uniform float uBeatFlash;
+  uniform float uScale;
+
+  varying float vFlicker;
+  varying float vMixFactor;
+
+  vec3 nbMod289v3(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec4 nbMod289v4(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec4 nbPermute(vec4 x) { return nbMod289v4(((x*34.0)+1.0)*x); }
+  vec4 nbTir(vec4 r)     { return 1.79284291400159 - 0.85373472095314 * r; }
+  float nbNoise(vec3 v) {
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = nbMod289v3(i);
+    vec4 p = nbPermute(nbPermute(nbPermute(
+      i.z + vec4(0.0, i1.z, i2.z, 1.0))
+      + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+      + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0)*2.0 + 1.0;
+    vec4 s1 = floor(b1)*2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+    vec3 p0 = vec3(a0.xy,h.x);
+    vec3 p1 = vec3(a0.zw,h.y);
+    vec3 p2 = vec3(a1.xy,h.z);
+    vec3 p3 = vec3(a1.zw,h.w);
+    vec4 norm = nbTir(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+  }
+
+  void main() {
+    float t = uTime * 0.10;
+    vec3 np = position * 0.55 + aSeed * 2.5;
+    float nx = nbNoise(np + vec3(t, 0.0, 0.0));
+    float ny = nbNoise(np + vec3(0.0, t + 13.7, 0.0));
+    float nz = nbNoise(np + vec3(0.0, 0.0, t + 7.3));
+    vec3 swirl = vec3(nx, ny, nz);
+
+    float radialPulse = 1.0 + uBass * 0.18 + uBeatFlash * 0.28;
+    float swirlAmp = 0.38 + uMid * 0.25 + uHigh * 0.14;
+    vec3 displaced = position * radialPulse + swirl * swirlAmp;
+
+    vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
+    gl_Position = projectionMatrix * mvPos;
+
+    float twinkle = 0.5 + 0.5 * sin(uTime * (1.8 + aPhase * 2.6) + aPhase * 6.2831);
+    vFlicker   = 0.55 + twinkle * (0.45 + uHigh * 0.55);
+    vMixFactor = clamp(swirl.x * 0.45 + aSeed.y * 0.1 + 0.5, 0.0, 1.0);
+
+    float sz = aScale * (0.12 + uAudioLevel * 0.04 + uBeatFlash * 0.05) * vFlicker;
+    gl_PointSize = clamp(sz * (uScale / max(-mvPos.z, 0.8)), 1.5, 64.0);
+  }
+`;
+
+const nebulaFragShader = `
+  uniform vec3  uColor1;
+  uniform vec3  uColor2;
+  uniform float uBass;
+  uniform float uBeatFlash;
+
+  varying float vFlicker;
+  varying float vMixFactor;
+
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    if (d > 0.5) discard;
+    float soft = 1.0 - smoothstep(0.08, 0.5, d);
+    vec3  col  = mix(uColor1, uColor2, vMixFactor) * vFlicker;
+    float alpha = soft * (0.70 + uBass * 0.20 + uBeatFlash * 0.25);
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
+  }
+`;
+
+sphereMat.uniforms.uScale = { value: renderer.domElement.height * 0.5 };
+// Nebula gets shared time/audio uniforms but fixed purple palette — immune to theme switching
+// BASELINE: nebulaUniforms has its own uColor1/uColor2 (shallow copy). Do not point it back at
+// sphereMat.uniforms directly or nebula will recolor on every theme switch.
+const nebulaUniforms = Object.assign({}, sphereMat.uniforms, {
+  uColor1: { value: new THREE.Color(0x2A0B3D) },
+  uColor2: { value: new THREE.Color(0x4838a8) },
+});
+const nebulaMat = new THREE.ShaderMaterial({
+  vertexShader: nebulaVertShader,
+  fragmentShader: nebulaFragShader,
+  uniforms: nebulaUniforms,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: false,
+});
+const nebulaSwarm = new THREE.Points(nebulaGeo, nebulaMat);
+nebulaSwarm.renderOrder = 3;
+scene.add(nebulaSwarm);
+
+// ===================================================================
+// MARS TERRAIN
+// ===================================================================
+function thash(x, y) { const n = Math.sin(x*127.1 + y*311.7)*43758.5453; return n-Math.floor(n); }
+function tnoise(x, y) {
+  const ix=Math.floor(x), iy=Math.floor(y), fx=x-ix, fy=y-iy;
+  const ux=fx*fx*(3-2*fx), uy=fy*fy*(3-2*fy);
+  return thash(ix,iy)*(1-ux)*(1-uy) + thash(ix+1,iy)*ux*(1-uy)
+       + thash(ix,iy+1)*(1-ux)*uy   + thash(ix+1,iy+1)*ux*uy;
+}
+function tfbm(x, y) {
+  let v=0, a=0.55, f=1.0;
+  for(let i=0;i<6;i++){v+=tnoise(x*f,y*f)*a; a*=0.48; f*=2.13;}
+  return v;
+}
+// height=18 → local Y ±9 → after rotation world Z ±9
+// position.z=-10 → near edge at z=-10+9=-1 (just behind wireframe), far edge at z=-19
+const terrainGeo = new THREE.PlaneGeometry(60, 18, 160, 60);
+const tpos = terrainGeo.attributes.position;
+for(let i=0;i<tpos.count;i++){
+  const tx=tpos.getX(i), ty=tpos.getY(i);
+  const h = tfbm(tx*0.18+4.1, ty*0.18+2.7)*4.0 - 0.5;
+  tpos.setZ(i, h);
+}
+terrainGeo.computeVertexNormals();
+
+const terrainMat = new THREE.MeshStandardMaterial({
+  color: 0x07091a,
+  emissive: new THREE.Color(0x030510),
+  roughness: 1.0,
+  metalness: 0.0,
+  fog: true,
+});
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+terrain.rotation.x = -Math.PI / 2;
+terrain.position.set(0, -4.5, -14);
+scene.add(terrain);
+
+// PointLight: dynamic flash on beat/bass — keep intensity moderate so physical units don't kill it
+const sphereLight = new THREE.PointLight(0x5522cc, 2.0, 30);
+sphereLight.position.set(0, 0, 0);
+scene.add(sphereLight);
+// DirectionalLight: reliable terrain fill regardless of physical unit mode or distance
+const terrainDirLight = new THREE.DirectionalLight(0x5522cc, 0.25);  // subtle purple ridge highlight
+terrainDirLight.position.set(0, 4, 2);
+scene.add(terrainDirLight);
+const ambLight = new THREE.AmbientLight(0x080412, 0.8);  // near-black purple fill
+scene.add(ambLight);
+
+
+// ===================================================================
+// SHOCKWAVE SYSTEM
+// ===================================================================
+const shockwaves = [];
+const SHOCKWAVE_COLORS = [0xff4400, 0xff6600, 0xff2200, 0xcc3300];
+let shockwaveColorIdx = 0;
+function spawnShockwave(secondary = false) {
+  // Primary: saturated + lightened; secondary: slight hue shift, faster decay
+  const c = sphereMat.uniforms.uColor2.value.clone();
+  const _sh = {}; c.getHSL(_sh);
+  if (secondary) {
+    c.setHSL((_sh.h + 0.06) % 1.0, Math.min(_sh.s * 1.5, 1.0), Math.min(_sh.l * 1.6 + 0.22, 0.96));
+  } else {
+    c.setHSL(_sh.h, Math.min(_sh.s * 1.3, 1.0), Math.min(_sh.l * 1.4 + 0.18, 0.95));
+  }
+  const swStartRadius = secondary ? (0.62 + Math.random() * 0.10) : (0.55 + Math.random() * 0.10);
+  const swTube = secondary ? 0.018 + Math.random() * 0.012 : 0.022 + Math.random() * 0.014;
+  const geo = new THREE.TorusGeometry(swStartRadius, swTube, 10, 72);
+  const mat = new THREE.MeshBasicMaterial({
+    color: c, transparent: true, opacity: 1.10,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(sphere.position);
+  // Base orientation follows sphere rotation with minor random tilt for variety
+  mesh.rotation.copy(sphere.rotation);
+  mesh.rotation.x += (Math.random() - 0.5) * 0.8;
+  mesh.rotation.z += (Math.random() - 0.5) * 0.5;
+  scene.add(mesh);
+  // Shockwave lifetime adapts to tempo — fast BPM = shorter waves to prevent pile-up
+  const _swMaxAge = Math.max(24, Math.round(_beatInterval * 60 * (secondary ? 0.85 : 1.15)));
+  shockwaves.push({ mesh, mat, geo, age: 0, maxAge: _swMaxAge, secondary });
+}
+
+// ===================================================================
+// WEB AUDIO API
+// ===================================================================
+const audio = document.getElementById('audio');
+let audioCtx = null;
+let analyser = null;
+let dataArray = null;
+let sourceNode = null;
+let compressor = null;
+let audioConnected = false;
+
+function initAudio() {
+  if (audioConnected) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  sourceNode = audioCtx.createMediaElementSource(audio);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.82;
+  analyser.minDecibels = -90;
+  analyser.maxDecibels = -10;   // KEY FIX: default -30 saturates all music
+  compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.setValueAtTime(-18, audioCtx.currentTime);
+  compressor.knee.setValueAtTime(30, audioCtx.currentTime);
+  compressor.ratio.setValueAtTime(8, audioCtx.currentTime);
+  compressor.attack.setValueAtTime(0.003, audioCtx.currentTime);
+  compressor.release.setValueAtTime(0.25, audioCtx.currentTime);
+  sourceNode.connect(analyser);
+  analyser.connect(compressor);
+  compressor.connect(audioCtx.destination);
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+  audioConnected = true;
+}
+
+let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
+let fluxLevel = 0, brightnessLevel = 0;
+let prevDataArray = null;
+// Rolling 90-frame bass history for dynamic beat threshold (~1.5s at 60fps)
+const bassHistory = new Float32Array(90);
+let bassHistIdx = 0;
+
+function updateAudio() {
+  if (!analyser) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  analyser.getByteFrequencyData(dataArray);
+
+  const binCount = dataArray.length;
+  const bassBins = Math.floor(binCount * 0.06);   // 0–6%  sub+bass
+  const midBins  = Math.floor(binCount * 0.30);   // 6–30% low-mid
+  const highBins = Math.floor(binCount * 0.70);   // 30–70% hi-mid+presence
+
+  let bassSum = 0, midSum = 0, highSum = 0;
+  for (let i = 0; i < bassBins; i++)          bassSum += dataArray[i];
+  for (let i = bassBins; i < midBins; i++)    midSum  += dataArray[i];
+  for (let i = midBins;  i < highBins; i++)   highSum += dataArray[i];
+  // brightness = air band (70–100%) — controls particle sparkle
+  let brightSum = 0;
+  for (let i = highBins; i < binCount; i++)   brightSum += dataArray[i];
+
+  const rawBass       = Math.pow(bassSum / bassBins / 255, 0.85);
+  const rawMid        = Math.pow(midSum  / (midBins - bassBins) / 255, 0.85);
+  const rawHigh       = Math.pow(highSum / (highBins - midBins) / 255, 0.85);
+  const rawBrightness = Math.pow(brightSum / (binCount - highBins) / 255, 0.75);
+  const rawOverall    = Math.pow((bassSum + midSum + highSum) / binCount / 255, 0.85);
+
+  // Spectral flux = sum of positive spectral changes vs previous frame (onset detector)
+  let fluxSum = 0;
+  if (prevDataArray) {
+    for (let i = 0; i < binCount; i++) {
+      const d = dataArray[i] - prevDataArray[i];
+      if (d > 0) fluxSum += d;
+    }
+  }
+  const rawFlux = Math.min(fluxSum / (binCount * 60), 1.0);
+
+  const atk = 0.68, rel = 0.08;
+  bassLevel       = rawBass       > bassLevel       ? bassLevel       + (rawBass       - bassLevel)       * atk : bassLevel       + (rawBass       - bassLevel)       * rel;
+  midLevel        = rawMid        > midLevel        ? midLevel        + (rawMid        - midLevel)        * atk : midLevel        + (rawMid        - midLevel)        * rel;
+  highLevel       = rawHigh       > highLevel       ? highLevel       + (rawHigh       - highLevel)       * atk : highLevel       + (rawHigh       - highLevel)       * rel;
+  brightnessLevel = rawBrightness > brightnessLevel ? brightnessLevel + (rawBrightness - brightnessLevel) * 0.45 : brightnessLevel + (rawBrightness - brightnessLevel) * 0.08;
+  fluxLevel       = rawFlux       > fluxLevel       ? fluxLevel       + (rawFlux       - fluxLevel)       * 0.70 : fluxLevel       + (rawFlux       - fluxLevel)       * 0.18;
+  audioLevel      = audioLevel    + (rawOverall     - audioLevel)     * 0.15;
+
+  // Update rolling bass history for dynamic beat threshold
+  bassHistory[bassHistIdx] = bassLevel;
+  bassHistIdx = (bassHistIdx + 1) % bassHistory.length;
+
+  // Save this frame's spectrum for next-frame flux
+  if (!prevDataArray) prevDataArray = new Uint8Array(binCount);
+  prevDataArray.set(dataArray);
+}
+
+// ===================================================================
+// ANIMATION LOOP
+// ===================================================================
+let time = 0;
+const clock = new THREE.Clock();
+
+// Reusable HSL scratch objects — avoids per-frame GC allocations
+const _hslScratch = {};
+const _hslScratch2 = {};
+// Theme accent tint for orb glow blend — updated by applyEnvColor on every theme change
+let _themeAccentColor = new THREE.Color(0x3a1280); // default: dark violet matches initial glow
+const _glowTarget = new THREE.Color(); // scratch for per-frame blended glow target
+
+// Beat detection state
+let prevBass    = 0;
+let beatFlash   = 0;
+let beatCooldown = 0;
+let spherePulse = 0;
+let pendingShockwave2 = 0;
+let _beatShake = 0;
+let _beatHueBurst = 0;
+let _lastBeatTime = 0;
+let _beatInterval = 0.50; // estimated seconds between beats (starts at 120 BPM)
+let _corePulsePhase = 0;
+let _orbitSpinBoost = 0;
+
+// Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
+let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0;
+
+// Integrated breathing phases — rate speeds up with audio so there are no phase discontinuities
+let _breathePhase  = 0;
+let _breathe2Phase = 0;
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  STABLE VISUAL BASELINE — DO NOT REGRESS                           ║
+// ║  Rounds 1–3 QA passed. Freeze these constraints permanently.       ║
+// ║                                                                    ║
+// ║  1. ORB COLOR: _tColor1/_tColor2 must stay fixed blue-violet.     ║
+// ║     applyTheme() must NOT assign new colors to these targets.      ║
+// ║     Album art and theme dots cannot drive the sphere shader.       ║
+// ║                                                                    ║
+// ║  2. THEME SCOPE: album/theme color may only affect CSS accent      ║
+// ║     vars and environment elements (rings, comets, glow sphere).    ║
+// ║     It must not recolor particles, nebula, or the orb shader.      ║
+// ║                                                                    ║
+// ║  3. PARTICLES: particleMat and haloMat2 are fixed muted purple.   ║
+// ║     applyEnvColor() must NOT set their color. No render-loop       ║
+// ║     lerp toward theme color is allowed.                            ║
+// ║                                                                    ║
+// ║  4. SCALE CAP: sScale is clamped to 1.06 maximum. Do not raise    ║
+// ║     this value. It prevents the anti-explosion constraint breach.  ║
+// ║                                                                    ║
+// ║  5. VERTEX AUDIO: raw audio data must not directly drive vertex    ║
+// ║     positions. All displacement must go through _sBass/_sMid/      ║
+// ║     _sHigh smoothed signals with clamp.                            ║
+// ║                                                                    ║
+// ║  6. HUE LOCK: beat flare must only adjust saturation/lightness.   ║
+// ║     _hslScratch2.h must remain unchanged in the beat flare block.  ║
+// ║     HSL hue must never accumulate over time.                       ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+// Dynamic sphere color targets — lerped smoothly each frame
+let _tColor1 = new THREE.Color(0x2A0B3D);
+let _tColor2 = new THREE.Color(0x7A2CFF);
+let _mixHue = 0, _mixCssFrame = 0;
+
+const state = {
+  playlist: [],
+  currentIndex: -1,
+  lyrics: [],
+  currentLyricIndex: -1,
+  liked: false,
+  volume: 0.8,
+  shuffle: false,
+  repeat: 0,
+  theme: 'violet',
+  visualMode: 'planet',
+};
+
+const metricEls = {
+  bass:   { bar: document.getElementById('m-bass'),   val: document.getElementById('mv-bass') },
+  mid:    { bar: document.getElementById('m-mid'),    val: document.getElementById('mv-mid') },
+  high:   { bar: document.getElementById('m-high'),   val: document.getElementById('mv-high') },
+  energy: { bar: document.getElementById('m-energy'), val: document.getElementById('mv-energy') },
+  led: document.getElementById('beat-led'),
+};
+let lastMetricsUi = 0;
+let lastBgGlow = 0;
+const bgGradientEl = document.getElementById('bg-gradient');
+
+function updateMetric(el, value) {
+  if (!el?.bar || !el?.val) return;
+  const clamped = Math.min(value, 1);
+  el.bar.style.width = (clamped * 100).toFixed(1) + '%';
+  el.val.textContent = clamped.toFixed(2);
+}
+
+// ===================================================================
+// ── LIQUID AURA MODE — independent 2D canvas visualizer ─────────────
+// Reuses _sBass/_sMid/_sHigh smoothed signals from the shared audio pipeline.
+// Does NOT touch Three.js materials, sphere shader, or particle systems.
+// ===================================================================
+
+const _laCanvas = document.getElementById('liquid-canvas');
+const _laCtx = _laCanvas ? _laCanvas.getContext('2d') : null;
+let _laTime = 0;
+let _laLastFrameTime = 0;
+let _laPlayBlend = 0;  // lerped 0→1 on play, decays to 0 on pause over ~1s
+
+// Album accent for liquid aura — clamped separately from CSS accent
+let _laAccentR = 42, _laAccentG = 11, _laAccentB = 90;
+
+function updateLiquidAccent(threeColor) {
+  const hsl = {};
+  threeColor.getHSL(hsl);
+  // Governance clamps: satMax=0.42, brightnessMax=0.55 (tighter than CSS accent)
+  const s = Math.min(hsl.s, 0.42);
+  const l = Math.min(hsl.l, 0.55);
+  const c = new THREE.Color().setHSL(hsl.h, s, l);
+  _laAccentR = Math.round(c.r * 255);
+  _laAccentG = Math.round(c.g * 255);
+  _laAccentB = Math.round(c.b * 255);
+}
+
+function _resizeLiquidCanvas() {
+  if (!_laCanvas) return;
+  _laCanvas.width  = window.innerWidth;
+  _laCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', _resizeLiquidCanvas);
+_resizeLiquidCanvas();
+
+function _renderLiquidAura(dt) {
+  if (!_laCtx || !_laCanvas) return;
+  _laTime += dt;
+  const t = _laTime;
+  const W = _laCanvas.width;
+  const H = _laCanvas.height;
+  const isPlaying = !audio.paused;
+
+  // Smooth blend: playing → 1 (fast attack ~0.4s), paused → 0 (slow decay ~1.5s)
+  const blendRate = isPlaying ? dt * 2.5 : dt * 0.65;
+  _laPlayBlend += ((isPlaying ? 1.0 : 0.0) - _laPlayBlend) * Math.min(blendRate, 1.0);
+
+  // ── Audio-reactive values — all clamped, smoothed bands only ───────
+  const auraScale  = Math.min(1.0 + _sBass * 0.035 + beatFlash * 0.020, 1.055); // bass + beat → scale
+  const waveSpeed  = 0.12 + Math.min(_sMid * 0.12, 0.12) * _laPlayBlend;    // mid  → speed
+  const shimmerOp  = Math.min(0.03 + _sHigh * 0.05, 0.08) * _laPlayBlend;   // treble → shimmer
+
+  const cx = W * 0.5;
+  const cy = H * 0.5;
+  const md = Math.min(W, H);
+
+  // ── Layer 1: Dark base ──────────────────────────────────────────────
+  _laCtx.clearRect(0, 0, W, H);
+  _laCtx.fillStyle = '#030108';
+  _laCtx.fillRect(0, 0, W, H);
+
+  // ── Layer 2: Soft liquid field — two crossing directional flows ─────
+  // Colors must be significantly brighter than the base to be visible on #030108.
+  // Flow A — violet, drifts toward upper-right
+  const aX = cx + (Math.sin(t * waveSpeed * 0.40) * W * 0.26 + Math.cos(t * waveSpeed * 0.15) * W * 0.07);
+  const aY = cy + (Math.cos(t * waveSpeed * 0.28) * H * 0.20 + Math.sin(t * waveSpeed * 0.18) * H * 0.05);
+  const gA = _laCtx.createRadialGradient(aX, aY, 0, aX, aY, md * 0.62);
+  gA.addColorStop(0,    'rgba(88,22,145,0.82)');
+  gA.addColorStop(0.40, 'rgba(48,10,88,0.48)');
+  gA.addColorStop(1.0,  'rgba(3,1,8,0.0)');
+  _laCtx.fillStyle = gA;
+  _laCtx.fillRect(0, 0, W, H);
+
+  // Flow B — dark indigo, counters Flow A to create directional tension
+  const bX = cx + (Math.cos(t * waveSpeed * 0.33 + 1.8) * W * 0.22 + Math.sin(t * waveSpeed * 0.13 + 0.6) * W * 0.05);
+  const bY = cy + (Math.sin(t * waveSpeed * 0.22 + 1.0) * H * 0.19 + Math.cos(t * waveSpeed * 0.12) * H * 0.06);
+  const gB = _laCtx.createRadialGradient(bX, bY, 0, bX, bY, md * 0.50);
+  gB.addColorStop(0,    'rgba(16,22,80,0.72)');
+  gB.addColorStop(0.48, 'rgba(8,10,42,0.38)');
+  gB.addColorStop(1.0,  'rgba(3,1,8,0.0)');
+  _laCtx.fillStyle = gB;
+  _laCtx.fillRect(0, 0, W, H);
+
+  // ── Layer 3: Aura core — soft central focal area ────────────────────
+  // This is the visual subject of the mode. Must be clearly visible.
+  const coreR  = md * 0.32 * auraScale;
+  const coreOp = Math.min(0.42 + _laPlayBlend * 0.16 + beatFlash * 0.18, 0.64); // 0.42 idle → 0.58 playing → 0.64 on beat
+  const cdX    = Math.sin(t * waveSpeed * 0.21 + 0.3) * W * 0.048;
+  const cdY    = Math.cos(t * waveSpeed * 0.16 + 0.8) * H * 0.036;
+  const gCore  = _laCtx.createRadialGradient(cx + cdX, cy + cdY, 0, cx + cdX, cy + cdY, coreR);
+  gCore.addColorStop(0,    `rgba(118,44,200,${coreOp.toFixed(3)})`);
+  gCore.addColorStop(0.30, `rgba(72,18,140,${(coreOp * 0.55).toFixed(3)})`);
+  gCore.addColorStop(0.65, `rgba(30,6,65,${(coreOp * 0.18).toFixed(3)})`);
+  gCore.addColorStop(1.0,  'rgba(3,1,8,0.0)');
+  _laCtx.fillStyle = gCore;
+  _laCtx.fillRect(0, 0, W, H);
+
+  // ── Layer 4: Gentle wave motion — two wide organic ripples ─────────
+  // Soft pools of light rising and falling — no bars, no lines.
+  const w1Y   = cy + Math.sin(t * waveSpeed * 0.27 + 0.4) * H * 0.22 + Math.cos(t * waveSpeed * 0.13) * H * 0.06;
+  const w1Op  = Math.min(0.22 + _laPlayBlend * 0.12, 0.34);
+  const gW1   = _laCtx.createRadialGradient(cx, w1Y, 0, cx, w1Y, md * 0.40);
+  gW1.addColorStop(0,   `rgba(100,40,165,${w1Op.toFixed(3)})`);
+  gW1.addColorStop(0.5, `rgba(52,14,95,${(w1Op * 0.36).toFixed(3)})`);
+  gW1.addColorStop(1.0, 'rgba(3,1,8,0.0)');
+  _laCtx.fillStyle = gW1;
+  _laCtx.fillRect(0, 0, W, H);
+
+  const w2Y   = cy + Math.cos(t * waveSpeed * 0.20 + 2.2) * H * 0.25 + Math.sin(t * waveSpeed * 0.10 + 1.1) * H * 0.04;
+  const w2Op  = Math.min(0.16 + _laPlayBlend * 0.10, 0.26);
+  const gW2   = _laCtx.createRadialGradient(cx * 0.82, w2Y, 0, cx * 0.82, w2Y, md * 0.36);
+  gW2.addColorStop(0,   `rgba(28,12,72,${w2Op.toFixed(3)})`);
+  gW2.addColorStop(0.5, `rgba(14,5,36,${(w2Op * 0.34).toFixed(3)})`);
+  gW2.addColorStop(1.0, 'rgba(3,1,8,0.0)');
+  _laCtx.fillStyle = gW2;
+  _laCtx.fillRect(0, 0, W, H);
+
+  // ── Beat ripple — soft expanding ring on bass beat ─────────────────
+  // beatFlash starts at 0.5 on beat; ring expands outward as it decays to 0.
+  if (beatFlash > 0.04) {
+    const rippleProgress = Math.max(0, (0.5 - beatFlash) / 0.5); // 0 at onset → 1 when faded
+    const rippleR = md * (0.24 + rippleProgress * 0.22);          // expands 0.24md → 0.46md
+    const rippleOp = Math.min(beatFlash * 0.10, 0.10);
+    const gRipple = _laCtx.createRadialGradient(cx, cy, rippleR * 0.85, cx, cy, rippleR);
+    gRipple.addColorStop(0,   'rgba(150,90,220,0.0)');
+    gRipple.addColorStop(0.5, `rgba(150,90,220,${rippleOp.toFixed(3)})`);
+    gRipple.addColorStop(1.0, 'rgba(150,90,220,0.0)');
+    _laCtx.fillStyle = gRipple;
+    _laCtx.fillRect(0, 0, W, H);
+  }
+
+  // ── Layer 5: Audio breathing — album accent + treble shimmer ───────
+  const accentOp = Math.min(0.14 * _laPlayBlend, 0.14);
+  if (accentOp > 0.003) {
+    const aaX  = cx + Math.sin(t * waveSpeed * 0.24 + 0.4) * W * 0.08;
+    const aaY  = cy + Math.cos(t * waveSpeed * 0.17 + 0.9) * H * 0.07;
+    const aaR  = md * 0.30 * auraScale;
+    const gAcc = _laCtx.createRadialGradient(aaX, aaY, 0, aaX, aaY, aaR);
+    gAcc.addColorStop(0,   `rgba(${_laAccentR},${_laAccentG},${_laAccentB},${accentOp.toFixed(3)})`);
+    gAcc.addColorStop(0.5, `rgba(${_laAccentR},${_laAccentG},${_laAccentB},${(accentOp * 0.28).toFixed(3)})`);
+    gAcc.addColorStop(1.0, `rgba(${_laAccentR},${_laAccentG},${_laAccentB},0.0)`);
+    _laCtx.fillStyle = gAcc;
+    _laCtx.fillRect(0, 0, W, H);
+  }
+
+  if (shimmerOp > 0.003) {
+    const sy = cy + Math.sin(t * waveSpeed * 0.31) * H * 0.16;
+    const sg = _laCtx.createLinearGradient(0, sy - 50, 0, sy + 50);
+    sg.addColorStop(0,   'rgba(170,130,255,0.0)');
+    sg.addColorStop(0.5, `rgba(170,130,255,${shimmerOp.toFixed(3)})`);
+    sg.addColorStop(1.0, 'rgba(170,130,255,0.0)');
+    _laCtx.fillStyle = sg;
+    _laCtx.fillRect(0, sy - 50, W, 100);
+  }
+
+  // ── Vignette — darken edges, preserve premium feel ─────────────────
+  const vg = _laCtx.createRadialGradient(cx, cy, md * 0.24, cx, cy, md * 0.78);
+  vg.addColorStop(0,   'rgba(0,0,0,0.0)');
+  vg.addColorStop(1.0, 'rgba(0,0,0,0.65)');
+  _laCtx.fillStyle = vg;
+  _laCtx.fillRect(0, 0, W, H);
+}
+
+function _animateLiquid() {
+  requestAnimationFrame(_animateLiquid);
+  if (state.visualMode !== 'liquidAura' || document.hidden) return;
+  const now = performance.now() / 1000;
+  if (_laLastFrameTime === 0) _laLastFrameTime = now;
+  const dt = Math.min(now - _laLastFrameTime, 0.05);
+  _laLastFrameTime = now;
+  _renderLiquidAura(dt);
+}
+_animateLiquid();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (document.hidden) {
+    clock.getDelta();
+    return;
+  }
+
+  const delta = Math.min(clock.getDelta(), 0.05);
+  time += delta;
+
+  updateAudio();
+
+  // ── Beat onset detection (dynamic threshold) ─────────────────────
+  if (beatCooldown > 0) beatCooldown--;
+  // Dynamic threshold: average window shrinks with faster tempos for tighter beat tracking
+  const _dynWin = Math.max(12, Math.min(60, Math.round(_beatInterval * 60 * 0.55)));
+  let bassAvg = 0;
+  for (let i = 0; i < _dynWin; i++) bassAvg += bassHistory[(bassHistIdx - 1 - i + bassHistory.length) % bassHistory.length];
+  bassAvg /= _dynWin;
+  const beatThreshold = Math.max(0.17, bassAvg * 1.18);
+  const onBeat = bassLevel > beatThreshold && bassLevel > prevBass + 0.025 && beatCooldown === 0;
+  if (onBeat) {
+    beatFlash     = 0.5;
+    spherePulse   = 0.35;
+    _beatShake    = 0.4;
+    _beatHueBurst = 0.3;
+    // Adaptive cooldown — tracks actual beat interval so fast songs stay locked
+    if (_lastBeatTime > 0) {
+      _beatInterval = _beatInterval * 0.82 + (time - _lastBeatTime) * 0.18;
+    }
+    _lastBeatTime = time;
+    beatCooldown = Math.max(6, Math.round(_beatInterval * 60 * 0.38));
+    // Phase nudge: small jolt in the breathing cycle — creates a visual "heartbeat" shudder
+    _breathePhase  += 0.20;
+    _breathe2Phase += 0.32;
+    // Orbital tilt jolt — rings tip toward viewer on each beat, spring back via lerp
+    orbitGroup.rotation.x += 0.10;
+    _orbitSpinBoost = 1.0;
+    pendingShockwave2 = 0;
+  }
+  if (pendingShockwave2 > 0) pendingShockwave2 = 0;
+  prevBass    = bassLevel;
+  beatFlash     *= 0.88; // slower decay → more sustained beat punch (was 0.82)
+  spherePulse   *= 0.90;
+  _beatShake    *= 0.75;
+  _beatHueBurst *= 0.84;
+
+  // ── Core sphere — idle breathing + audio reactivity ───────────────
+  // Integrated phase so rate change is seamless (no jump when audio energy changes)
+  _breathePhase  += delta * (0.72 + _sAudio * 0.42);
+  _breathe2Phase += delta * (1.37 + _sAudio * 0.80);
+  // Amplitude grows slightly with audio energy — sphere breathes deeper during music
+  const _bAmp = 0.055 + _sAudio * 0.022;
+  const _breathe = Math.sin(_breathePhase) * _bAmp + Math.sin(_breathe2Phase) * (_bAmp * 0.51);
+  sphere.rotation.y += 0.0015 + midLevel * 0.008 + spherePulse * 0.010;
+  sphere.rotation.x += 0.0005 + midLevel * 0.003 + spherePulse * 0.004;
+  sphere.rotation.z += Math.sin(time * 0.9) * 0.0002 + highLevel * 0.002;
+  const sScale = Math.min(1.0 + _breathe * 0.55 + _sBass * 0.085 + beatFlash * 0.015 + spherePulse * 0.02, 1.10); // cap raised to 1.10 per audit brief (was 1.06 — too static)
+  // Beat squash: compress Y, bulge X/Z — springs back as spherePulse decays
+  const _sq = spherePulse * 0.065;
+  sphere.scale.set(sScale * (1.0 + _sq * 0.6), sScale * (1.0 - _sq), sScale * (1.0 + _sq * 0.6));
+
+  // Per-band smoothing — brief targets: bass 0.055/frame, mid 0.04/frame, treble 0.025/frame at 60fps
+  // Asymmetric: faster attack to catch beats, slow release for organic decay (no jitter)
+  const _sfAtkBass  = 1.0 - Math.exp(-delta / 0.08);   // 80ms attack
+  const _sfRelBass  = 1.0 - Math.exp(-delta / 0.30);   // 300ms release (~0.055/frame)
+  const _sfAtkMid   = 1.0 - Math.exp(-delta / 0.12);   // 120ms attack
+  const _sfRelMid   = 1.0 - Math.exp(-delta / 0.42);   // 420ms release (~0.04/frame)
+  const _sfAtkHigh  = 1.0 - Math.exp(-delta / 0.18);   // 180ms attack
+  const _sfRelHigh  = 1.0 - Math.exp(-delta / 0.66);   // 660ms release (~0.025/frame)
+  const _sfAtkAudio = 1.0 - Math.exp(-delta / 0.10);   // 100ms attack for overall level
+  const _sfRelAudio = 1.0 - Math.exp(-delta / 0.30);   // 300ms release for overall
+  _sBass  += (bassLevel  - _sBass)  * (bassLevel  > _sBass  ? _sfAtkBass  : _sfRelBass);
+  _sMid   += (midLevel   - _sMid)   * (midLevel   > _sMid   ? _sfAtkMid   : _sfRelMid);
+  _sHigh  += (highLevel  - _sHigh)  * (highLevel  > _sHigh  ? _sfAtkHigh  : _sfRelHigh);
+  _sAudio += (audioLevel - _sAudio) * (audioLevel > _sAudio ? _sfAtkAudio : _sfRelAudio);
+
+  sphereMat.uniforms.uTime.value       = time;
+  // Breathing modulates perceived audio level slightly — sphere feels more alive
+  sphereMat.uniforms.uAudioLevel.value = _sAudio * 0.70 + Math.sin(_breathePhase) * 0.028;
+  sphereMat.uniforms.uBass.value       = _sBass;
+  sphereMat.uniforms.uMid.value        = _sMid;
+  sphereMat.uniforms.uHigh.value       = _sHigh;
+  sphereMat.uniforms.uBeatFlash.value  = beatFlash * 0.82;
+  sphereMat.uniforms.uFlux.value       = fluxLevel * 0.75;
+
+  // Mix theme — hue cycles through full spectrum, speed follows audio energy
+  if (state.theme === 'mix') {
+    _mixHue = (_mixHue + 0.00018 + _sAudio * 0.0007) % 1.0;
+    _tColor1.setHSL(_mixHue, 0.90, 0.12);
+    _tColor2.setHSL(_mixHue, 1.00, 0.50);
+    if (++_mixCssFrame % 18 === 0) {
+      const a = new THREE.Color().setHSL(_mixHue, 1.0, 0.56);
+      const b = new THREE.Color().setHSL((_mixHue + 0.08) % 1.0, 0.9, 0.68);
+      const html = document.documentElement;
+      html.style.setProperty('--accent',  '#' + a.getHexString());
+      html.style.setProperty('--accent2', '#' + b.getHexString());
+      const mr = Math.round(a.r * 255), mg = Math.round(a.g * 255), mb = Math.round(a.b * 255);
+      html.style.setProperty('--accent-glow', `rgba(${mr},${mg},${mb},0.22)`);
+      applyEnvColor(a);
+    }
+  }
+
+  // Smooth color transition toward target (~1.8s time constant)
+  const _cf = 1.0 - Math.exp(-delta / 1.8);
+  sphereMat.uniforms.uColor1.value.lerp(_tColor1, _cf);
+  sphereMat.uniforms.uColor2.value.lerp(_tColor2, _cf);
+  // Color energy model — hue locked to blue-violet, lightness breathes with music
+  // Bug fix: prior block clamped sat from ~1.0 down to 0.45 and lightness from 0.587 down to 0.55 on beats — making beats look DEAD.
+  // Now: hue strictly clamped [0.695,0.745]; saturation stays natural; lightness rises with energy.
+  const _colorEnergy = Math.min(_sAudio * 0.12 + _sBass * 0.10 + beatFlash * 0.16, 0.22);
+  {
+    const _c2 = sphereMat.uniforms.uColor2.value;
+    _c2.getHSL(_hslScratch2);
+    _c2.setHSL(
+      Math.max(0.695, Math.min(0.745, _hslScratch2.h)),     // hue locked [0.695,0.745] — prevents drift
+      Math.min(_hslScratch2.s, 0.98),                        // saturation: natural ~1.0, no bad clamp
+      Math.min(_hslScratch2.l + _colorEnergy * 0.20, 0.72)  // lightness: base 0.587 → up to 0.72 on peak energy
+    );
+  }
+
+  // ── Dual-layer glow: core solid, halo faint ──────────────────────
+  const coreScale = 1.0 + _sBass * 0.07 + spherePulse * 0.05 + beatFlash * 0.04;
+  _corePulsePhase += delta * (1.8 + _sAudio * 2.2 + spherePulse * 1.8);
+  const _corePulse = 0.90 + Math.sin(_corePulsePhase) * 0.10;
+  coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60);
+  // Glow drifts toward orb-violet tinted with theme accent — subtle theme feedback on rim
+  const _themeRimBlend = Math.min(0.12 + _sAudio * 0.12 + beatFlash * 0.10, 0.28);
+  _glowTarget.copy(sphereMat.uniforms.uColor2.value).lerp(_themeAccentColor, _themeRimBlend);
+  coreMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
+  haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
+  coreSphere.scale.setScalar(coreScale);
+  // Glow layers breathe with audio — expand outward on bass/beat for dynamic halo
+  glowSphere1.scale.setScalar(1.008 + _sBass * 0.025 + beatFlash * 0.040);
+  glowSphere2.scale.setScalar(1.022 + _sBass * 0.050 + beatFlash * 0.080);
+  // Slight independent drift so the two glow layers show parallax vs the main sphere
+  glowSphere1.rotation.x = Math.sin(time * 0.07) * 0.14;
+  glowSphere1.rotation.z = Math.cos(time * 0.05) * 0.09;
+  glowSphere2.rotation.x = Math.sin(time * 0.11 + 1.2) * 0.10;
+  glowSphere2.rotation.z = Math.cos(time * 0.08 + 0.7) * 0.07;
+
+  // ── Orbit rings — slow, readable motion with bass pulse ─────────────
+  _orbitSpinBoost *= 0.88;
+  orbitGroup.rotation.y += 0.0012 + midLevel * 0.0035 + _sBass * 0.0020 + _orbitSpinBoost * 0.008;
+  orbitGroup.rotation.z -= 0.00045 + highLevel * 0.0012 + _sBass * 0.0008;
+  // Bass makes the orbit group tilt on X — rings lean and rock with low-end hits
+  orbitGroup.rotation.x += (_sBass * 0.12 - orbitGroup.rotation.x) * Math.min(delta * 2.5, 0.12);
+  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055);
+  orbitRings.forEach((ring, i) => {
+    // Inner ring (i=0) spins harder on beat — closest to sphere, most reactive
+    const ringSpinBoost = i === 0 ? spherePulse * 0.010 : spherePulse * 0.004 / (i + 1);
+    const spinDir = i % 2 === 0 ? 1 : -1; // alternating rings counter-rotate for depth
+    ring.rotation.z += spinDir * (i + 1) * (0.0004 + midLevel * 0.0012) + ringSpinBoost;
+    ring.scale.setScalar(1.0 + beatFlash * (0.04 + i * 0.008) + _sMid * 0.016);
+    // Independent slow tilt sway per ring + beat snap
+    ring.rotation.x += Math.sin(time * (0.13 + i * 0.06)) * 0.0006
+                    + bassLevel * 0.005 * Math.sin(time * (0.55 + i * 0.4))
+                    + spherePulse * 0.018 * (i % 2 === 0 ? 1 : -1);
+    ring.rotation.y += Math.cos(time * (0.09 + i * 0.05)) * 0.0003;
+    ring.material.opacity = Math.min(
+      ring.userData.baseOpacity * (1.0 + audioLevel * 2.0 + beatFlash * 3.0),
+      0.92
+    );
+    // Alternate between uColor1 and uColor2 per ring for visual contrast
+    const _rc = i % 2 === 0 ? sphereMat.uniforms.uColor2.value : sphereMat.uniforms.uColor1.value;
+    _rc.getHSL(_hslScratch);
+    ring.material.color.setHSL((_hslScratch.h + i * 0.04) % 1.0, Math.min(_hslScratch.s * 1.1, 1.0), Math.min(_hslScratch.l * 1.2 + 0.10, 0.90));
+  });
+
+  // ── Audio comets — slanted 3D satellites with bass-reactive trails ───────
+  cometGroup.rotation.y += 0.0010 + _sMid * 0.0025 + spherePulse * 0.006;
+  cometGroup.rotation.x = 0.24 + Math.sin(time * 0.20) * 0.08 + _sBass * 0.08;
+  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045);
+  _cometColor.copy(sphereMat.uniforms.uColor2.value);
+  _cometColor.getHSL(_hslScratch);
+  audioComets.forEach((comet, i) => {
+    const speed = comet.speed + _sBass * 0.75 + beatFlash * 0.65;
+    const phase = time * speed + comet.phase + spherePulse * 0.35;
+    const radialWobble = Math.sin(time * (0.73 + i * 0.09) + comet.phase) * (0.035 + _sMid * 0.025);
+    const radius = comet.radius + radialWobble + beatFlash * (0.025 + i * 0.006);
+    const yAmp = comet.yAmp + _sBass * 0.10;
+    comet.head.position.set(
+      Math.cos(phase) * radius,
+      Math.sin(phase * 1.7 + comet.tilt) * yAmp + Math.cos(phase * 0.7) * 0.06,
+      Math.sin(phase) * radius * (0.62 + i * 0.035)
+    );
+    const headScale = 1.0 + _sBass * 2.2 + beatFlash * 2.8 + (i === 0 ? fluxLevel * 1.2 : 0.0);
+    comet.head.scale.setScalar(headScale);
+    comet.headMat.opacity = Math.min(0.55 + _sAudio * 0.26 + beatFlash * 0.34, 1.0);
+
+    for (let p = 0; p < cometTailPoints; p++) {
+      const lag = p * (0.055 + _sBass * 0.010);
+      const tp = phase - lag * speed * 1.45;
+      const fadeRadius = radius * (1.0 - p * 0.006);
+      const k = p * 3;
+      comet.tailPos[k]     = Math.cos(tp) * fadeRadius;
+      comet.tailPos[k + 1] = Math.sin(tp * 1.7 + comet.tilt) * yAmp + Math.cos(tp * 0.7) * 0.06;
+      comet.tailPos[k + 2] = Math.sin(tp) * fadeRadius * (0.62 + i * 0.035);
+    }
+    comet.tailGeo.attributes.position.needsUpdate = true;
+    const hueShift = (_hslScratch.h + i * 0.035 + beatFlash * 0.035) % 1.0;
+    const cometLight = Math.min(_hslScratch.l * 1.15 + 0.16 + beatFlash * 0.10, 0.92);
+    comet.headMat.color.setHSL(hueShift, Math.min(_hslScratch.s * 1.15, 1.0), cometLight);
+    comet.tail.material.color.copy(comet.headMat.color);
+    comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62);
+  });
+
+  // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
+  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.2 + fluxLevel * 1.0;
+  sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, 0.04);
+
+  // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
+  for (let i = shockwaves.length - 1; i >= 0; i--) {
+    const sw = shockwaves[i];
+    sw.age++;
+    const p = sw.age / sw.maxAge;
+    // Primary: ease-out (fast start, slow end); secondary: ease-in-out (graceful trail)
+    const eased = sw.secondary
+      ? p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
+      : 1.0 - Math.pow(1.0 - p, 2.5);
+    const maxExpand = sw.secondary ? 1.2 : 1.8;
+    sw.mesh.scale.setScalar(1.0 + eased * maxExpand);
+    sw.mat.opacity = (sw.secondary ? 0.75 : 1.00) * Math.pow(1.0 - p, sw.secondary ? 1.1 : 1.3);
+    if (sw.age >= sw.maxAge) {
+      scene.remove(sw.mesh);
+      sw.geo.dispose();
+      sw.mat.dispose();
+      shockwaves.splice(i, 1);
+    }
+  }
+
+  // ── Background particles — very faint depth cue, only flicker on loud peaks ──
+  particles.rotation.y -= 0.00015 + brightnessLevel * 0.0012 + spherePulse * 0.0030;
+  particles.rotation.x += 0.00005 + brightnessLevel * 0.0004;
+  particles.rotation.z += 0.00008 + _sAudio * 0.0004;
+  particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10);
+  particleMat.size    = 0.014 + _sBass * 0.010 + beatFlash * 0.008;
+  particles.scale.setScalar(1.0 + _sBass * 0.04 + beatFlash * 0.06);
+  // color stays fixed muted-purple — no lerp toward theme color
+
+  // ── Near-sphere halo — subtle orbital dust, barely visible at idle ──
+  haloParticles.rotation.y += 0.0008 + midLevel * 0.004 + _sBass * 0.012 + spherePulse * 0.025 + beatFlash * 0.045;
+  haloParticles.rotation.x -= 0.0003 + highLevel * 0.002 + _sBass * 0.006;
+  haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004;
+  haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
+  haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
+  haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04);
+  // color stays fixed muted-purple — no lerp toward theme color
+
+  // ── Nebula swarm — slow drift + uScale sync for correct point-size attenuation ──
+  nebulaSwarm.rotation.y += 0.00040 + _sBass * 0.0009 + beatFlash * 0.002;
+  nebulaSwarm.rotation.x += Math.sin(time * 0.19) * 0.00015;
+  nebulaMat.uniforms.uScale.value = renderer.domElement.height * 0.5;
+
+  // ── User-selectable 3D rhythm modes ───────────────────────────────
+  const waveActive = state.visualMode === 'wave';
+  const barsActive = state.visualMode === 'bars';
+  waveField.visible = waveActive;
+  spectrumBars.visible = barsActive;
+
+  if (waveActive) {
+    const waveColor = sphereMat.uniforms.uColor2.value;
+    waveMat.color.lerp(waveColor, 0.05);
+    waveMat.opacity = Math.min(0.22 + _sAudio * 0.28 + beatFlash * 0.28, 0.72);
+    waveMat.size = 0.020 + _sHigh * 0.020 + beatFlash * 0.012;
+    for (let i = 0; i < waveCount; i++) {
+      const x = waveBase[i * 3];
+      const z = waveBase[i * 3 + 2];
+      const dist = Math.sqrt(x * x + z * z);
+      const ridge = Math.sin(dist * 2.8 - time * (2.4 + _sBass * 2.1)) * (0.16 + _sBass * 0.22);
+      const cross = Math.cos(x * 2.2 + time * (1.6 + _sMid * 1.8)) * Math.sin(z * 2.1 - time * 1.1) * (0.08 + _sMid * 0.14);
+      const sparkleLift = Math.sin((x + z) * 4.0 + time * (4.0 + _sHigh * 3.0)) * _sHigh * 0.08;
+      wavePos[i * 3] = x + Math.sin(time * 0.45 + z) * 0.025;
+      wavePos[i * 3 + 1] = waveBase[i * 3 + 1] + ridge + cross + sparkleLift + beatFlash * 0.10 * Math.max(0, 1.0 - dist / 3.2);
+      wavePos[i * 3 + 2] = z + Math.cos(time * 0.38 + x) * 0.025;
+    }
+    waveGeo.attributes.position.needsUpdate = true;
+    waveField.rotation.y += 0.0007 + _sBass * 0.0015;
+  }
+
+  if (barsActive) {
+    const binCount = dataArray?.length || 0;
+    barMat.color.lerp(sphereMat.uniforms.uColor2.value, 0.05);
+    barMat.opacity = Math.min(0.24 + _sAudio * 0.34 + beatFlash * 0.28, 0.78);
+    for (let i = 0; i < barCount; i++) {
+      const t = i / barCount;
+      const bin = binCount ? Math.min(binCount - 1, Math.floor(t * t * binCount * 0.72)) : 0;
+      const raw = binCount ? dataArray[bin] / 255 : (0.18 + Math.sin(time * 1.5 + i) * 0.08);
+      const lift = Math.pow(raw, 0.72) * 1.25 + _sBass * 0.25 + beatFlash * 0.18;
+      const height = 0.12 + lift * (0.70 + Math.sin(i * 0.7) * 0.08);
+      const col = i % 16;
+      const row = Math.floor(i / 16);
+      const x = (col - 7.5) * 0.18;
+      const z = -0.85 + row * 0.33 + Math.sin(time * 0.32 + i) * 0.025;
+      _barDummy.position.set(x, height * 0.5, z);
+      _barDummy.scale.set(1.0, height, 1.0);
+      _barDummy.rotation.y = Math.sin(time * 0.5 + i * 0.23) * 0.12;
+      _barDummy.updateMatrix();
+      spectrumBars.setMatrixAt(i, _barDummy.matrix);
+    }
+    spectrumBars.instanceMatrix.needsUpdate = true;
+    spectrumBars.rotation.y = Math.sin(time * 0.20) * 0.10;
+  }
+
+  // ── Planet pulse UI (12fps is enough, keeps layout work low) ─────────
+  // ── Ambient bloom — colored radial glow behind sphere, pulses with bass ──
+  if (time - lastBgGlow > 0.05) {
+    lastBgGlow = time;
+    const gc1 = sphereMat.uniforms.uColor1.value;
+    const gc2 = sphereMat.uniforms.uColor2.value;
+    const gcMix = Math.min(0.70 + beatFlash * 0.22, 0.92);
+    const r = Math.round((gc2.r * gcMix + gc1.r * (1 - gcMix)) * 255);
+    const g = Math.round((gc2.g * gcMix + gc1.g * (1 - gcMix)) * 255);
+    const b = Math.round((gc2.b * gcMix + gc1.b * (1 - gcMix)) * 255);
+    const strength = _sBass * 0.22 + beatFlash * 0.40;
+    // Bloom size pulses with bass for a breathing effect
+    const bw = (40 + _sBass * 20 + beatFlash * 28).toFixed(1);
+    const bh = (34 + _sBass * 16 + beatFlash * 22).toFixed(1);
+    // Second bloom layer uses uColor1 for depth — slightly offset up for painterly feel
+    const r1 = Math.round(gc1.r * 255), g1 = Math.round(gc1.g * 255), b1 = Math.round(gc1.b * 255);
+    const str2 = (_sMid * 0.12 + beatFlash * 0.20).toFixed(3);
+    bgGradientEl.style.background =
+      `radial-gradient(ellipse ${bw}% ${bh}% at 50% 50%, rgba(${r},${g},${b},${strength.toFixed(3)}) 0%, transparent 68%),` +
+      `radial-gradient(ellipse 38% 30% at 52% 44%, rgba(${r1},${g1},${b1},${str2}) 0%, transparent 55%),` +
+      `radial-gradient(ellipse 72% 62% at 50% 50%, transparent 28%, rgba(0,0,0,0.52) 100%)`;
+
+    // Beat-reactive album art glow
+    const _artWrap = document.getElementById('right-art-wrap');
+    if (_artWrap) {
+      const _gSz = (55 + beatFlash * 90 + _sBass * 45).toFixed(1);
+      const _gAl = (0.15 + beatFlash * 0.50 + _sBass * 0.22).toFixed(3);
+      _artWrap.style.boxShadow = `0 20px 60px rgba(0,0,0,0.65),0 0 0 1px rgba(255,255,255,0.08),0 0 ${_gSz}px rgba(${r},${g},${b},${_gAl})`;
+    }
+  }
+
+  if (time - lastMetricsUi > 0.08) {
+    lastMetricsUi = time;
+    updateMetric(metricEls.bass, bassLevel);
+    updateMetric(metricEls.mid, midLevel);
+    updateMetric(metricEls.high, highLevel);
+    updateMetric(metricEls.energy, audioLevel);
+    const led = metricEls.led;
+    if (led) {
+      const r = Math.floor(26 + beatFlash * 229), g = Math.floor(beatFlash * 90);
+      led.style.background = `rgb(${r},${g},0)`;
+      led.style.boxShadow = beatFlash > 0.25 ? `0 0 ${Math.floor(beatFlash*10)}px rgba(255,90,18,0.9)` : 'none';
+    }
+  }
+
+  // Sway + beat zoom: sphere punches toward camera on each beat then springs back
+  camera.position.x = Math.sin(time * 0.23) * 0.09 + Math.sin(time * 0.67) * 0.035 + _sBass * Math.sin(time * 1.8) * 0.022 + Math.sin(time * 47.3) * _beatShake * 0.018;
+  camera.position.y = 1.2 + Math.cos(time * 0.29) * 0.055 + _sBass * 0.028 + Math.cos(time * 38.9) * _beatShake * 0.012;
+  camera.position.z = 4.2 - spherePulse * 0.28 - _sBass * 0.08;
+  // Subtle bass-reactive lookAt — camera tilts very slightly toward sphere on heavy bass
+  camera.lookAt(Math.sin(time * 0.17) * 0.03, -0.40 + _sBass * 0.06, -1.5);
+  // Cinematic beat punch: briefly zoom in on beat, springs back as spherePulse decays
+  const _targetFov = 45.0 - spherePulse * 2.8 - _sBass * 0.8;
+  camera.fov += (_targetFov - camera.fov) * 0.12;
+  camera.updateProjectionMatrix();
+
+  if (state.visualMode !== 'liquidAura') renderer.render(scene, camera);
+}
+
+animate();
+
+// ===================================================================
+// COLOR EXTRACTION FROM ALBUM ART
+// ===================================================================
+function extractAccentColor(imgUrl, callback) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 50;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0, 50, 50);
+    const data = ctx.getImageData(0, 0, 50, 50).data;
+
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const brightness = (r + g + b) / 3;
+      const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+      // Skip too dark, too light, or too grey — only vivid mid-tone pixels
+      if (brightness > 30 && brightness < 170 && saturation > 40) {
+        rSum += r; gSum += g; bSum += b; count++;
+      }
+    }
+
+    if (count > 0) {
+      const r = rSum / count / 255, g = gSum / count / 255, b = bSum / count / 255;
+      const threeColor = new THREE.Color(r, g, b);
+      const hsl = {};
+      threeColor.getHSL(hsl);
+      // Clamp lightness ≤ 0.45 and boost saturation — prevents pale/white colors
+      threeColor.setHSL(hsl.h, Math.min(1.0, hsl.s * 1.4), Math.min(0.45, Math.max(0.25, hsl.l)));
+      callback(`#${threeColor.getHexString()}`, threeColor);
+    } else {
+      callback('rgb(122,44,255)', new THREE.Color(0x7A2CFF));
+    }
+    } catch (e) {
+      callback('rgb(122,44,255)', new THREE.Color(0x7A2CFF));
+    }
+  };
+  img.onerror = () => callback('rgb(255,96,48)', new THREE.Color(1.0, 0.376, 0.188));
+  img.src = imgUrl;
+}
+
+function applyAccentColor(cssColor, threeColor) {
+  // Album art drives CSS accent tokens only — the 3D sphere stays in its theme color.
+  // Brief: "Album art color can influence accent only. It must not recolor the entire visualizer."
+  const hsl = {};
+  threeColor.getHSL(hsl);
+  const h = hsl.h;
+  const s = Math.min(hsl.s * 1.25, 0.70);
+  const baseL = Math.min(Math.max(hsl.l * 1.7, 0.46), 0.62);
+
+  const accent  = new THREE.Color().setHSL(h, s, baseL);
+  const accent2 = new THREE.Color().setHSL(h, Math.min(s * 0.85, 0.60), Math.min(baseL + 0.14, 0.72));
+
+  const html = document.documentElement;
+  html.style.setProperty('--accent',  '#' + accent.getHexString());
+  html.style.setProperty('--accent2', '#' + accent2.getHexString());
+
+  const ar = Math.round(accent.r * 255), ag = Math.round(accent.g * 255), ab = Math.round(accent.b * 255);
+  html.style.setProperty('--accent-glow', `rgba(${ar},${ag},${ab},0.18)`);
+  // _tColor1/_tColor2 intentionally NOT updated — sphere keeps its theme palette.
+  // Feed raw album color to Liquid Aura (clamped independently inside updateLiquidAccent)
+  updateLiquidAccent(threeColor);
+}
+
+// ===================================================================
+// API LAYER
+// ===================================================================
+const API = 'http://localhost:3000';
+
+// Login session cookie — captured from QR check body and persisted in localStorage.
+// Passed explicitly as ?cookie= on every request so the API server forwards MUSIC_U to NetEase.
+let sessionCookie = localStorage.getItem('netease_cookie') || '';
+
+// Strip Set-Cookie metadata (Path, Domain, Expires, HttpOnly, Secure, SameSite) so only
+// real key=value pairs (MUSIC_U, __csrf, NMTID…) are forwarded to NeteaseCloudMusicApi.
+function cleanCookieString(raw) {
+  const SKIP = new Set(['path','domain','expires','max-age','samesite','secure','httponly']);
+  return raw.split(';').reduce((acc, part) => {
+    const eq = part.indexOf('=');
+    if (eq === -1) return acc;                         // bare attributes like HttpOnly
+    const key = part.slice(0, eq).trim().toLowerCase();
+    if (SKIP.has(key)) return acc;
+    acc.push(part.trim());
+    return acc;
+  }, []).join('; ');
+}
+
+async function api(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  const cookieParam = sessionCookie
+    ? `${sep}cookie=${encodeURIComponent(sessionCookie)}`
+    : '';
+  const res = await fetch(API + path + cookieParam, {
+    credentials: 'include',
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function searchSongs(q) {
+  const data = await api(`/search?keywords=${encodeURIComponent(q)}&limit=30&type=1`);
+  return data.result?.songs || [];
+}
+
+async function getSongUrl(id) {
+  // Try 320k first, then fall back through quality levels
+  const qualities = [
+    `/song/url/v1?id=${id}&level=exhigh`,
+    `/song/url/v1?id=${id}&level=standard`,
+    `/song/url?id=${id}&br=128000`,
+  ];
+  for (const q of qualities) {
+    try {
+      const data = await api(q);
+      const url = data.data?.[0]?.url;
+      if (url) return url;
+    } catch (e) { /* try next */ }
+  }
+  return null;
+}
+
+async function getSongDetail(id) {
+  const data = await api(`/song/detail?ids=${id}`);
+  return data.songs?.[0] || null;
+}
+
+async function getLyric(id) {
+  const data = await api(`/lyric?id=${id}`);
+  return { lrc: data.lrc?.lyric || '', tlyric: data.tlyric?.lyric || '' };
+}
+
+// ===================================================================
+// LRC PARSER
+// ===================================================================
+function parseLRC(lrc) {
+  const lines = [];
+  const re = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/g;
+  let m;
+  while ((m = re.exec(lrc)) !== null) {
+    const min = parseInt(m[1]);
+    const sec = parseInt(m[2]);
+    const ms  = m[3].length === 2 ? parseInt(m[3]) * 10 : parseInt(m[3]);
+    const time = min * 60 + sec + ms / 1000;
+    const text = m[4].trim();
+    if (text) lines.push({ time, text });
+  }
+  lines.sort((a, b) => a.time - b.time);
+  return lines;
+}
+
+// ===================================================================
+// LYRIC SYNC
+// ===================================================================
+function syncLyrics() {
+  if (!state.lyrics.length) return;
+  const t = audio.currentTime;
+  let idx = -1;
+  for (let i = state.lyrics.length - 1; i >= 0; i--) {
+    if (t >= state.lyrics[i].time) { idx = i; break; }
+  }
+  if (idx !== state.currentLyricIndex) {
+    state.currentLyricIndex = idx;
+    renderLyricHighlight(idx);
+  }
+}
+
+function renderLyricHighlight(activeIdx) {
+  const lines = document.querySelectorAll('.lyric-line');
+  lines.forEach((el, i) => {
+    const dist = Math.abs(i - activeIdx);
+    el.classList.toggle('active', i === activeIdx);
+    el.classList.toggle('near', dist === 1 || dist === 2);
+  });
+  if (activeIdx >= 0 && lines[activeIdx]) {
+    lines[activeIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function renderLyrics(lyrics, transMap = new Map()) {
+  const wrap = document.getElementById('lyrics-wrap');
+  if (!lyrics.length) {
+    wrap.innerHTML = '<div id="no-lyrics">暂无歌词</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  lyrics.forEach((line) => {
+    const div = document.createElement('div');
+    div.className = 'lyric-line';
+    const trans = transMap.get(line.time);
+    div.innerHTML = `<div>${escHtml(line.text)}</div>${trans ? `<div class="lyric-trans">${escHtml(trans)}</div>` : ''}`;
+    div.addEventListener('click', () => { audio.currentTime = line.time; });
+    wrap.appendChild(div);
+  });
+}
+
+// ===================================================================
+// PLAYLIST RENDER
+// ===================================================================
+function renderPlaylist(songs) {
+  const wrap = document.getElementById('playlist-wrap');
+  if (!songs.length) {
+    wrap.innerHTML = '<div id="status-msg">没有找到结果</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+
+  // Section label
+  const label = document.createElement('div');
+  label.className = 'section-label';
+  label.textContent = '搜索结果';
+  wrap.appendChild(label);
+
+  songs.forEach((song, i) => {
+    const artistStr = Array.isArray(song.artists)
+      ? song.artists.map(a => a.name).join(' / ')
+      : (song.ar ? song.ar.map(a => a.name).join(' / ') : '未知歌手');
+    const dur = song.duration
+      ? formatTime(song.duration / 1000)
+      : (song.dt ? formatTime(song.dt / 1000) : '');
+
+    // Album art: try al.picUrl (v2 API) or album.picUrl (v1 API)
+    const picUrl = song.al?.picUrl || song.album?.picUrl || '';
+
+    const div = document.createElement('div');
+    div.className = 'song-item';
+    div.dataset.idx = i;
+
+    // Thumbnail
+    let thumbHtml;
+    if (picUrl) {
+      thumbHtml = `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
+    } else {
+      thumbHtml = `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
+    }
+
+    const fee = song.fee ?? 0;
+    const vipBadge = (fee > 0 && !sessionCookie) ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    div.innerHTML = `
+      ${thumbHtml}
+      <div class="song-info">
+        <div class="song-name">${escHtml(song.name)}${vipBadge}</div>
+        <div class="song-artist">${escHtml(artistStr)}</div>
+      </div>
+      <div class="eq-icon"><span></span><span></span><span></span></div>
+      ${dur ? `<div class="song-dur">${dur}</div>` : ''}
+    `;
+    div.addEventListener('click', () => playIndex(i));
+    wrap.appendChild(div);
+  });
+}
+
+function updatePlaylistActive(idx) {
+  document.querySelectorAll('.song-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+// ===================================================================
+// PLAY SONG
+// ===================================================================
+let loading = false;
+
+async function playIndex(idx) {
+  if (loading) return;
+  if (idx < 0 || idx >= state.playlist.length) return;
+
+  document.querySelector('.bar-song-info').classList.add('fade-out');
+
+  loading = true;
+  state.currentIndex = idx;
+  updatePlaylistActive(idx);
+
+  const song = state.playlist[idx];
+  const songId = song.id;
+
+  document.getElementById('bar-title').textContent = song.name || '加载中...';
+  const artistStr = Array.isArray(song.artists)
+    ? song.artists.map(a => a.name).join(' / ')
+    : (song.ar ? song.ar.map(a => a.name).join(' / ') : '未知歌手');
+  document.getElementById('bar-artist').textContent = artistStr;
+
+  // Reset lyrics
+  state.lyrics = [];
+  state.currentLyricIndex = -1;
+  renderLyrics([]);
+
+  try {
+    const [urlData, detail, lyricStr] = await Promise.all([
+      getSongUrl(songId).catch(() => null),
+      getSongDetail(songId).catch(() => null),
+      getLyric(songId).catch(() => ({ lrc: '', tlyric: '' })),
+    ]);
+
+    if (!urlData) {
+      showToast(`"${song.name}" 无版权/需VIP，已跳过`);
+      document.querySelector('.bar-song-info').classList.remove('fade-out');
+      loading = false;
+      const next = idx + 1;
+      if (next < state.playlist.length) playIndex(next);
+      return;
+    }
+
+    // Album art — fall back to picUrl from search result if detail call failed
+    const artUrl = detail?.al?.picUrl || song.al?.picUrl || song.album?.picUrl || '';
+    const barArt = document.getElementById('bar-art');
+    const barArtPlaceholder = document.getElementById('bar-art-placeholder');
+    const rightArt = document.getElementById('right-album-art');
+    const rightPlaceholder = document.getElementById('right-art-placeholder');
+    if (artUrl) {
+      barArt.src = artUrl + '?param=130y130';
+      barArt.style.display = 'block';
+      if (barArtPlaceholder) barArtPlaceholder.style.display = 'none';
+      rightArt.src = artUrl + '?param=512y512';
+      rightArt.style.display = 'block';
+      rightPlaceholder.style.display = 'none';
+      extractAccentColor(artUrl + '?param=50y50', applyAccentColor);
+    } else {
+      barArt.src = '';
+      barArt.style.display = 'none';
+      if (barArtPlaceholder) barArtPlaceholder.style.display = 'flex';
+      rightArt.style.display = 'none';
+      rightPlaceholder.style.display = 'flex';
+    }
+
+    // Right panel song info
+    const rightTitle = document.getElementById('right-song-title');
+    const rightArtist = document.getElementById('right-song-artist');
+    if (rightTitle) rightTitle.textContent = song.name || '';
+    if (rightArtist) rightArtist.textContent = artistStr;
+
+    document.querySelector('.bar-song-info').classList.remove('fade-out');
+
+    // Lyrics + translation
+    const _lrcLines = parseLRC(lyricStr.lrc);
+    const _tLines   = parseLRC(lyricStr.tlyric || '');
+    const _transMap = new Map(_tLines.map(l => [l.time, l.text]));
+    state.lyrics = _lrcLines;
+    renderLyrics(_lrcLines, _transMap);
+
+    // Crossfade: fade out → switch → fade in
+    initAudio();
+    if (!audio.paused && audio.currentTime > 0) {
+      await fadeTo(0, 280);
+    }
+    audio.src = urlData;
+    audio.volume = 0;
+    await audio.play().catch(e => console.warn('Play error:', e));
+    fadeTo(state.volume, 350);
+    addToHistory(song);
+
+  } catch (err) {
+    showToast('加载失败，请检查 API 服务');
+    console.error(err);
+  }
+
+  loading = false;
+}
+
+// ===================================================================
+// AUDIO EVENTS
+// ===================================================================
+audio.addEventListener('timeupdate', () => {
+  syncLyrics();
+  const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+  const pct = dur > 0 ? (audio.currentTime / dur) * 100 : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('time-current').textContent = formatTime(audio.currentTime);
+  document.getElementById('time-total').textContent = dur > 0 ? formatTime(dur) : '--:--';
+});
+
+audio.addEventListener('play', () => {
+  document.getElementById('icon-play').style.display = 'none';
+  document.getElementById('icon-pause').style.display = '';
+  document.body.classList.add('body-playing');
+  if (audioCtx?.state === 'suspended') audioCtx.resume();
+});
+
+audio.addEventListener('pause', () => {
+  document.getElementById('icon-play').style.display = '';
+  document.getElementById('icon-pause').style.display = 'none';
+  document.body.classList.remove('body-playing');
+});
+
+audio.addEventListener('ended', () => {
+  if (state.repeat === 2) {
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+    return;
+  }
+  const next = getNextIndex();
+  if (next !== -1) playIndex(next);
+  else if (state.repeat === 1) playIndex(0);
+});
+
+audio.addEventListener('error', () => {
+  showToast('播放出错，跳至下一首');
+  setTimeout(() => playIndex(state.currentIndex + 1), 1000);
+});
+
+// ===================================================================
+// CONTROLS
+// ===================================================================
+document.getElementById('btn-play-pause').addEventListener('click', () => {
+  initAudio();
+  if (audio.paused) {
+    audio.play().catch(() => {});
+  } else {
+    audio.pause();
+  }
+});
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0;
+  } else {
+    const idx = state.currentIndex <= 0 ? state.playlist.length - 1 : state.currentIndex - 1;
+    playIndex(idx);
+  }
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  const next = getNextIndex();
+  playIndex(next !== -1 ? next : 0);
+});
+
+// ===================================================================
+// SHUFFLE / REPEAT / THEME
+// ===================================================================
+let _shuffleHistory = [];
+
+function getNextIndex() {
+  if (!state.playlist.length) return -1;
+  if (state.shuffle) {
+    const unplayed = state.playlist
+      .map((_, i) => i)
+      .filter(i => i !== state.currentIndex && !_shuffleHistory.includes(i));
+    if (!unplayed.length) { _shuffleHistory = []; return Math.floor(Math.random() * state.playlist.length); }
+    const pick = unplayed[Math.floor(Math.random() * unplayed.length)];
+    _shuffleHistory.push(pick);
+    return pick;
+  }
+  return state.currentIndex < state.playlist.length - 1 ? state.currentIndex + 1 : -1;
+}
+
+document.getElementById('btn-shuffle').addEventListener('click', () => {
+  state.shuffle = !state.shuffle;
+  _shuffleHistory = [];
+  document.getElementById('btn-shuffle').classList.toggle('active', state.shuffle);
+  showToast(state.shuffle ? '随机播放 开' : '随机播放 关');
+  savePrefs();
+});
+
+document.getElementById('btn-repeat').addEventListener('click', () => {
+  state.repeat = (state.repeat + 1) % 3;
+  const btn = document.getElementById('btn-repeat');
+  const iconAll = document.getElementById('icon-repeat-all');
+  const iconOne = document.getElementById('icon-repeat-one');
+  btn.classList.toggle('active', state.repeat > 0);
+  btn.classList.toggle('repeat-one', state.repeat === 2);
+  iconAll.style.display = state.repeat === 2 ? 'none' : '';
+  iconOne.style.display = state.repeat === 2 ? '' : 'none';
+  const labels = ['循环 关', '列表循环', '单曲循环'];
+  showToast(labels[state.repeat]);
+  savePrefs();
+});
+
+// ===================================================================
+// THEME
+// ===================================================================
+const THEME_SPHERE = {
+  orange:  { c1: 0x3d0d00, c2: 0xff5012 },
+  crimson: { c1: 0x3d0010, c2: 0xff1a3f },
+  rose:    { c1: 0x2d0020, c2: 0xff2080 },
+  violet:  { c1: 0x2A0B3D, c2: 0x7A2CFF },
+  blue:    { c1: 0x001035, c2: 0x1870ff },
+  teal:    { c1: 0x002520, c2: 0x00c8a0 },
+  green:   { c1: 0x001f10, c2: 0x00c855 },
+  mix:     { c1: 0x0a0000, c2: 0xff5012 },
+};
+
+// Sync all scene environment colors (glow sphere, rings, particles, light) to the current theme accent color.
+// Call whenever the theme or album art color changes.
+// BASELINE: applyEnvColor may set coreMat/haloMat glow, rings, comets, wave, bar.
+// It must NOT set particleMat.color or haloMat2.color — those stay fixed muted purple.
+// It must NOT modify sphereMat.uniforms.uColor1/uColor2 — the orb shader is locked.
+function applyEnvColor(c2Color) {
+  const h = {};
+  c2Color.getHSL(h);
+  // Keep glow color dark so AdditiveBlending layers saturate to theme hue, not white
+  const glowL = Math.max(Math.min(h.l * 0.65 + 0.04, 0.30), 0.16);
+  const glowCol = new THREE.Color().setHSL(h.h, Math.min(h.s, 1.0), glowL);
+  _themeAccentColor.copy(glowCol); // persist for render-loop theme rim blend
+  coreMat.uniforms.uGlowColor.value.copy(glowCol);
+  haloMat.uniforms.uGlowColor.value.copy(glowCol);
+  outerAuraMat.uniforms.uGlowColor.value.copy(glowCol);
+  const ringCol = new THREE.Color().setHSL(h.h, Math.min(h.s * 0.90, 0.60), Math.min(h.l * 0.9 + 0.08, 0.55));
+  orbitRings.forEach(ring => ring.material.color.copy(ringCol));
+  cometHeadMats.forEach(mat => mat.color.copy(ringCol));
+  cometTailMats.forEach(mat => mat.color.copy(ringCol));
+  // particleMat and haloMat2 intentionally NOT recolored — fixed muted purple per governance brief.
+  waveMat.color.copy(ringCol);
+  barMat.color.copy(ringCol);
+  sphereLight.color.copy(glowCol);
+}
+
+// BASELINE: applyTheme sets CSS data-theme and calls applyEnvColor for environment elements only.
+// It must NOT assign _tColor1/_tColor2 — the orb shader targets are permanently fixed blue-violet.
+function applyTheme(name) {
+  if (!THEME_SPHERE[name]) name = 'violet';
+  state.theme = name;
+  const html = document.documentElement;
+  html.removeAttribute('data-theme');
+  html.style.removeProperty('--accent');
+  html.style.removeProperty('--accent2');
+  if (name !== 'orange') html.setAttribute('data-theme', name);
+  document.querySelectorAll('.theme-dot').forEach(d => {
+    d.classList.toggle('active', d.dataset.theme === name);
+  });
+  if (name !== 'mix') {
+    // Sphere orb stays fixed violet — only environment (rings, comets, glow sphere) follows theme.
+    // Prevents whole scene going red/green/blue on theme dot click.
+    applyEnvColor(new THREE.Color(THEME_SPHERE[name]?.c2 ?? THEME_SPHERE.violet.c2));
+  }
+}
+
+document.querySelectorAll('.theme-dot').forEach(dot => {
+  dot.addEventListener('click', () => {
+    applyTheme(dot.dataset.theme);
+    savePrefs();
+  });
+});
+
+const VISUAL_MODE_LABELS = {
+  planet:     '干净星球',
+  wave:       '3D 粒子波',
+  bars:       '频谱柱阵',
+  liquidAura: '流光灵韵',
+};
+
+function applyVisualMode(mode, silent = false) {
+  // wave and bars removed from UI — silently map to planet
+  if (mode === 'wave' || mode === 'bars') mode = 'planet';
+  if (!VISUAL_MODE_LABELS[mode]) mode = 'planet';
+  state.visualMode = mode;
+  document.querySelectorAll('.visual-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.visual === mode);
+  });
+  const visualBtn = document.getElementById('btn-visual');
+  if (visualBtn) {
+    visualBtn.classList.toggle('active', mode !== 'planet');
+    visualBtn.title = `视觉模式：${VISUAL_MODE_LABELS[mode]}`;
+  }
+  // Show/hide the correct canvas
+  const threeCanvas  = document.getElementById('three-canvas');
+  const liquidCanvas = document.getElementById('liquid-canvas');
+  const isLiquid = mode === 'liquidAura';
+  if (threeCanvas)  threeCanvas.style.display  = isLiquid ? 'none'  : 'block';
+  if (liquidCanvas) liquidCanvas.style.display = isLiquid ? 'block' : 'none';
+  // Reset liquid frame timer so first frame has zero dt
+  if (isLiquid) _laLastFrameTime = 0;
+  if (!silent) showToast(`视觉模式：${VISUAL_MODE_LABELS[mode]}`);
+}
+
+document.getElementById('btn-visual')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('visual-panel')?.classList.toggle('hidden');
+});
+
+document.querySelectorAll('.visual-option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    applyVisualMode(btn.dataset.visual);
+    document.getElementById('visual-panel')?.classList.add('hidden');
+    savePrefs();
+  });
+});
+
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('visual-panel');
+  const button = document.getElementById('btn-visual');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (panel.contains(e.target) || button?.contains(e.target)) return;
+  panel.classList.add('hidden');
+});
+
+// ===================================================================
+// CROSSFADE
+// ===================================================================
+let _cfTimer = null;
+function fadeTo(targetVol, durationMs) {
+  clearInterval(_cfTimer);
+  return new Promise(resolve => {
+    const start = audio.volume;
+    const steps = 20;
+    const stepMs = durationMs / steps;
+    let s = 0;
+    _cfTimer = setInterval(() => {
+      s++;
+      audio.volume = Math.max(0, Math.min(1, start + (targetVol - start) * s / steps));
+      if (s >= steps) { clearInterval(_cfTimer); audio.volume = targetVol; resolve(); }
+    }, stepMs);
+  });
+}
+
+// ===================================================================
+// PERSIST PREFERENCES + RESUME
+// ===================================================================
+function savePrefs() {
+  localStorage.setItem('mp_prefs', JSON.stringify({
+    shuffle: state.shuffle, repeat: state.repeat,
+    theme: state.theme, volume: state.volume,
+    visualMode: state.visualMode,
+  }));
+}
+
+function saveResume() {
+  if (state.currentIndex < 0 || !state.playlist.length) return;
+  const s = state.playlist[state.currentIndex];
+  const artUrl = document.getElementById('bar-art').src || '';
+  localStorage.setItem('mp_resume', JSON.stringify({
+    song: { id: s.id, name: s.name, artists: s.artists || s.ar || [],
+            al: s.al || { picUrl: artUrl.split('?')[0] }, fee: s.fee || 0,
+            dt: s.dt || Math.round(audio.duration * 1000) || 0 },
+    time: Math.floor(audio.currentTime),
+  }));
+}
+
+setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
+
+// Restore on startup
+(function restoreState() {
+  const prefs = JSON.parse(localStorage.getItem('mp_prefs') || 'null');
+  if (prefs) {
+    if (prefs.theme) applyTheme(prefs.theme === 'orange' ? 'violet' : prefs.theme);
+    if (prefs.visualMode) applyVisualMode(prefs.visualMode, true);
+    if (typeof prefs.volume === 'number') {
+      state.volume = prefs.volume;
+      audio.volume = prefs.volume;
+      document.getElementById('volume-slider').value = prefs.volume * 100;
+    }
+    if (prefs.shuffle) {
+      state.shuffle = true;
+      document.getElementById('btn-shuffle').classList.add('active');
+    }
+    if (prefs.repeat) {
+      state.repeat = prefs.repeat;
+      const btn = document.getElementById('btn-repeat');
+      btn.classList.add('active');
+      if (prefs.repeat === 2) {
+        btn.classList.add('repeat-one');
+        document.getElementById('icon-repeat-all').style.display = 'none';
+        document.getElementById('icon-repeat-one').style.display = '';
+      }
+    }
+  }
+
+  const resume = JSON.parse(localStorage.getItem('mp_resume') || 'null');
+  if (resume?.song) {
+    state.playlist = [resume.song];
+    const t = resume.time || 0;
+    setTimeout(async () => {
+      await playIndex(0);
+      if (t > 3) {
+        setTimeout(() => { audio.currentTime = t; }, 800);
+      }
+    }, 800);
+  }
+})();
+
+// Progress bar seek (click + drag)
+let _draggingProgress = false;
+function _seekToProgress(clientX) {
+  if (!audio.duration) return;
+  const rect = document.getElementById('progress-bar-wrap').getBoundingClientRect();
+  audio.currentTime = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * audio.duration;
+}
+document.getElementById('progress-bar-wrap').addEventListener('mousedown', (e) => {
+  _draggingProgress = true;
+  _seekToProgress(e.clientX);
+  e.preventDefault();
+});
+document.addEventListener('mousemove', (e) => { if (_draggingProgress) _seekToProgress(e.clientX); });
+document.addEventListener('mouseup', () => { _draggingProgress = false; });
+
+// Progress tooltip
+const _progressWrap = document.getElementById('progress-bar-wrap');
+const _progressTooltip = document.getElementById('progress-tooltip');
+_progressWrap.addEventListener('mousemove', (e) => {
+  if (!audio.duration) return;
+  const rect = _progressWrap.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  _progressTooltip.textContent = formatTime(pct * audio.duration);
+  _progressTooltip.style.left = (e.clientX - rect.left) + 'px';
+  _progressTooltip.classList.remove('hidden');
+});
+_progressWrap.addEventListener('mouseleave', () => {
+  _progressTooltip.classList.add('hidden');
+});
+
+// Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%
+window.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea')) return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    initAudio();
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    audio.currentTime = Math.max(0, audio.currentTime - 5);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    state.volume = Math.min(1, Math.round((state.volume + 0.05) * 20) / 20);
+    audio.volume = state.volume;
+    document.getElementById('volume-slider').value = state.volume * 100;
+    showToast(`音量 ${Math.round(state.volume * 100)}%`);
+    savePrefs();
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    state.volume = Math.max(0, Math.round((state.volume - 0.05) * 20) / 20);
+    audio.volume = state.volume;
+    document.getElementById('volume-slider').value = state.volume * 100;
+    showToast(`音量 ${Math.round(state.volume * 100)}%`);
+    savePrefs();
+  }
+});
+
+// ===================================================================
+// SLEEP TIMER
+// ===================================================================
+const SLEEP_STEPS = [0, 15, 30, 45, 60];
+let _sleepStep = 0, _sleepTimer = null, _sleepRemaining = 0;
+
+function updateSleepUI() {
+  const btn = document.getElementById('btn-sleep');
+  const ind = document.getElementById('sleep-indicator');
+  if (_sleepStep === 0) { btn.classList.remove('active'); ind.textContent = ''; return; }
+  btn.classList.add('active');
+  const m = Math.floor(_sleepRemaining / 60);
+  const s = Math.floor(_sleepRemaining % 60);
+  ind.textContent = m > 0 ? `${m}m` : `${s}s`;
+}
+
+document.getElementById('btn-sleep').addEventListener('click', () => {
+  clearInterval(_sleepTimer);
+  _sleepStep = (_sleepStep + 1) % SLEEP_STEPS.length;
+  const mins = SLEEP_STEPS[_sleepStep];
+  if (mins === 0) { _sleepRemaining = 0; updateSleepUI(); showToast('睡眠定时 关'); return; }
+  _sleepRemaining = mins * 60;
+  updateSleepUI();
+  showToast(`${mins} 分钟后停止播放`);
+  _sleepTimer = setInterval(() => {
+    _sleepRemaining--;
+    updateSleepUI();
+    if (_sleepRemaining === 60) showToast('即将停止播放 (1分钟)');
+    if (_sleepRemaining <= 0) {
+      clearInterval(_sleepTimer);
+      _sleepStep = 0;
+      updateSleepUI();
+      fadeTo(0, 2500).then(() => { audio.pause(); audio.volume = state.volume; });
+      showToast('已停止播放 · 晚安');
+    }
+  }, 1000);
+});
+
+// ===================================================================
+// PLAY QUEUE PANEL
+// ===================================================================
+let _queueOpen = false;
+
+function renderQueue() {
+  const list = document.getElementById('queue-list');
+  if (!state.playlist.length) {
+    list.innerHTML = '<div style="padding:22px 16px;color:rgba(255,255,255,0.22);font-size:12px;text-align:center">队列为空</div>';
+    return;
+  }
+  list.innerHTML = state.playlist.map((s, i) => {
+    const name = s.name || '未知歌曲';
+    const artist = (s.artists || s.ar || []).map(a => a.name).join(' / ') || '未知歌手';
+    const dur = formatTime((s.dt || 0) / 1000);
+    const isCurrent = i === state.currentIndex;
+    return `<div class="queue-item${isCurrent ? ' current' : ''}" data-idx="${i}">
+      <span class="q-num">${isCurrent ? '▶' : i + 1}</span>
+      <span class="q-name">${escHtml(name)}</span>
+      <span class="q-artist">${escHtml(artist)}</span>
+      <span class="q-dur">${dur}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.queue-item').forEach(el => {
+    el.addEventListener('click', () => { playIndex(parseInt(el.dataset.idx)); toggleQueue(false); });
+  });
+  const cur = list.querySelector('.queue-item.current');
+  if (cur) setTimeout(() => cur.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+}
+
+function toggleQueue(show) {
+  _queueOpen = show !== undefined ? show : !_queueOpen;
+  document.getElementById('queue-panel').classList.toggle('hidden', !_queueOpen);
+  if (_queueOpen) renderQueue();
+}
+
+document.getElementById('btn-queue').addEventListener('click', () => toggleQueue());
+document.getElementById('queue-close').addEventListener('click', () => toggleQueue(false));
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && _queueOpen) toggleQueue(false); });
+
+// Volume
+const volSlider = document.getElementById('volume-slider');
+volSlider.value = state.volume * 100;
+volSlider.addEventListener('input', () => {
+  state.volume = volSlider.value / 100;
+  audio.volume = state.volume;
+  savePrefs();
+});
+
+// Like
+document.getElementById('btn-like').addEventListener('click', () => {
+  state.liked = !state.liked;
+  document.getElementById('btn-like').classList.toggle('liked', state.liked);
+  document.getElementById('icon-heart').style.display = state.liked ? 'none' : '';
+  document.getElementById('icon-heart-filled').style.display = state.liked ? '' : 'none';
+  showToast(state.liked ? '已加入喜欢 ♥' : '已取消喜欢');
+});
+
+// ===================================================================
+// SEARCH
+// ===================================================================
+let searchTimer = null;
+
+document.getElementById('search-input').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (!q) {
+    state.playlist = [];
+    renderHistory();
+    return;
+  }
+  searchTimer = setTimeout(() => performSearch(q), 400);
+});
+
+document.getElementById('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    clearTimeout(searchTimer);
+    const q = e.target.value.trim();
+    if (q) performSearch(q);
+  }
+});
+
+async function performSearch(q) {
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
+
+  try {
+    const songs = await searchSongs(q);
+    state.playlist = songs;
+    state.currentIndex = -1;
+    renderPlaylist(songs);
+    if (!songs.length) {
+      wrap.innerHTML = `<div id="empty-state"><span style="color:rgba(255,255,255,0.35);font-size:13px">没有找到 "${escHtml(q)}"</span></div>`;
+    }
+  } catch (err) {
+    console.error(err);
+    if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
+      wrap.innerHTML = `<div id="status-msg">
+        请先启动 NetEase Cloud Music API 服务<br>
+        <span style="font-size:12px;color:var(--text-muted)">端口 3000 · <a href="https://github.com/Binaryify/NeteaseCloudMusicApi" target="_blank">安装说明</a></span>
+      </div>`;
+    } else {
+      wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
+    }
+  }
+}
+
+// ===================================================================
+// UTILS
+// ===================================================================
+function formatTime(secs) {
+  if (!secs || isNaN(secs)) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ===================================================================
+// PLAY HISTORY
+// ===================================================================
+const MAX_HISTORY = 20;
+let playHistory = JSON.parse(localStorage.getItem('mp_history') || '[]');
+
+function addToHistory(song) {
+  playHistory = playHistory.filter(s => s.id !== song.id);
+  playHistory.unshift({
+    id: song.id, name: song.name,
+    artists: song.artists || song.ar || [],
+    al: song.al || {}, dt: song.dt || 0, fee: song.fee || 0
+  });
+  if (playHistory.length > MAX_HISTORY) playHistory.length = MAX_HISTORY;
+  localStorage.setItem('mp_history', JSON.stringify(playHistory));
+  if (!document.getElementById('search-input').value.trim()) renderHistory();
+}
+
+function renderHistory() {
+  const wrap = document.getElementById('playlist-wrap');
+  if (!playHistory.length) {
+    wrap.innerHTML = `<div id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
+      <span>搜索你喜欢的音乐</span>
+    </div>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="history-header">最近播放</div>` +
+    playHistory.map((s, i) => {
+      const artist = (s.artists || s.ar || []).map(a => a.name).join(' / ') || '未知';
+      const artUrl = s.al?.picUrl ? s.al.picUrl + '?param=60y60' : '';
+      const dur = formatTime((s.dt || 0) / 1000);
+      const fee = (s.fee === 1 || s.fee === 4) ? '<span class="vip-badge">VIP</span>' : '';
+      return `<div class="song-item" data-hist-idx="${i}" role="button" tabindex="0">
+        ${artUrl
+          ? `<img class="song-thumb" src="${escHtml(artUrl)}" alt="" loading="lazy">`
+          : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`}
+        <div class="song-info">
+          <div class="song-name">${escHtml(s.name || '未知')}${fee}</div>
+          <div class="song-artist">${escHtml(artist)}</div>
+        </div>
+        <div class="eq-icon"><span></span><span></span><span></span></div>
+        <div class="song-dur">${dur}</div>
+      </div>`;
+    }).join('');
+  wrap.querySelectorAll('.song-item[data-hist-idx]').forEach(el => {
+    el.addEventListener('click', () => {
+      const s = playHistory[parseInt(el.dataset.histIdx)];
+      state.playlist = [s];
+      state.currentIndex = -1;
+      playIndex(0);
+    });
+  });
+}
+
+// Show history immediately on startup
+renderHistory();
+
+// ===================================================================
+// LOGIN STATE HELPERS
+// ===================================================================
+let refreshTimer = null;
+
+let userUid = null;
+
+function markLoggedIn(uid) {
+  const btn = document.getElementById('login-btn');
+  btn.textContent = '已登录';
+  btn.classList.add('logged-in');
+  if (uid) userUid = uid;
+  // Show panel tabs and load playlists
+  document.getElementById('panel-tabs').classList.remove('hidden');
+  if (userUid) loadUserPlaylists(userUid);
+  // 30-min heartbeat to keep cookie alive
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(async () => {
+    try { await api(`/login/refresh?timestamp=${Date.now()}`); } catch (_) {}
+  }, 30 * 60 * 1000);
+}
+
+// ===================================================================
+// MY PLAYLISTS
+// ===================================================================
+let userPlaylists = [];
+let activePlaylistId = null;
+
+async function loadUserPlaylists(uid) {
+  const wrap = document.getElementById('mylist-wrap');
+  const back = document.getElementById('back-to-playlists');
+  try {
+    const data = await api(`/user/playlist?uid=${uid}&limit=50&timestamp=${Date.now()}`);
+    userPlaylists = data.playlist || [];
+    renderPlaylistList();
+  } catch (e) {
+    userPlaylists = [];
+  }
+}
+
+function renderPlaylistList() {
+  const wrap = document.getElementById('mylist-wrap');
+  const back = document.getElementById('back-to-playlists');
+  back.style.display = 'none';
+  wrap.innerHTML = '';
+  wrap.appendChild(back);
+  if (!userPlaylists.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:20px 14px;font-size:12px;color:rgba(255,255,255,0.3)';
+    empty.textContent = '暂无歌单';
+    wrap.appendChild(empty);
+    return;
+  }
+  userPlaylists.forEach(pl => {
+    const div = document.createElement('div');
+    div.className = 'my-playlist-item' + (pl.id === activePlaylistId ? ' active' : '');
+    const coverUrl = pl.coverImgUrl || '';
+    div.innerHTML = `
+      <div class="pl-icon">${coverUrl ? `<img src="${escHtml(coverUrl)}?param=64y64" loading="lazy">` : '♪'}</div>
+      <div class="pl-info">
+        <div class="pl-name">${escHtml(pl.name)}</div>
+        <div class="pl-count">${pl.trackCount ?? 0} 首</div>
+      </div>
+    `;
+    div.addEventListener('click', () => loadPlaylistTracks(pl.id, pl.name));
+    wrap.appendChild(div);
+  });
+}
+
+async function loadPlaylistTracks(playlistId, playlistName) {
+  activePlaylistId = playlistId;
+  const wrap = document.getElementById('mylist-wrap');
+  const back = document.getElementById('back-to-playlists');
+  wrap.innerHTML = '';
+  back.style.display = 'flex';
+  wrap.appendChild(back);
+  const loading = document.createElement('div');
+  loading.style.cssText = 'padding:20px 14px;font-size:12px;color:rgba(255,255,255,0.3)';
+  loading.textContent = '加载中...';
+  wrap.appendChild(loading);
+  try {
+    const data = await api(`/playlist/track/all?id=${playlistId}&limit=200&timestamp=${Date.now()}`);
+    const songs = data.songs || [];
+    state.playlist = songs;
+    wrap.removeChild(loading);
+    // Render song items in mylist-wrap
+    const label = document.createElement('div');
+    label.className = 'section-label';
+    label.textContent = playlistName;
+    wrap.appendChild(label);
+    songs.forEach((song, i) => {
+      const artistStr = song.ar ? song.ar.map(a => a.name).join(' / ') : '未知歌手';
+      const dur = song.dt ? formatTime(song.dt / 1000) : '';
+      const picUrl = song.al?.picUrl || '';
+      const div = document.createElement('div');
+      div.className = 'song-item';
+      div.dataset.idx = i;
+      let thumbHtml = picUrl
+        ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
+        : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
+      div.innerHTML = `
+        ${thumbHtml}
+        <div class="song-info">
+          <div class="song-name">${escHtml(song.name)}</div>
+          <div class="song-artist">${escHtml(artistStr)}</div>
+        </div>
+        <div class="eq-icon"><span></span><span></span><span></span></div>
+        ${dur ? `<div class="song-dur">${dur}</div>` : ''}
+      `;
+      div.addEventListener('click', () => playIndex(i));
+      wrap.appendChild(div);
+    });
+  } catch (e) {
+    loading.textContent = '加载失败: ' + e.message;
+  }
+}
+
+document.getElementById('tab-search').addEventListener('click', () => {
+  document.getElementById('tab-search').classList.add('active');
+  document.getElementById('tab-mylist').classList.remove('active');
+  document.getElementById('playlist-wrap').style.display = 'block';
+  document.getElementById('mylist-wrap').style.display = 'none';
+});
+
+document.getElementById('tab-mylist').addEventListener('click', () => {
+  document.getElementById('tab-mylist').classList.add('active');
+  document.getElementById('tab-search').classList.remove('active');
+  document.getElementById('playlist-wrap').style.display = 'none';
+  document.getElementById('mylist-wrap').style.display = 'block';
+  if (!userPlaylists.length && userUid) loadUserPlaylists(userUid);
+});
+
+document.getElementById('back-to-playlists').addEventListener('click', () => {
+  renderPlaylistList();
+  state.playlist = [];
+});
+
+// ===================================================================
+// CHECK API + LOGIN STATUS ON LOAD
+// ===================================================================
+(async () => {
+  try {
+    await fetch(API + '/search?keywords=test&limit=1', {
+      credentials: 'include',
+      signal: AbortSignal.timeout(3000),
+    });
+    // API is up — check if already logged in from a previous session
+    const status = await api(`/login/status?timestamp=${Date.now()}`);
+    const uid = status?.data?.profile?.userId ?? status?.profile?.userId;
+    if (uid) markLoggedIn(uid);
+  } catch {
+    // API not running or login check failed — silent
+  }
+})();
+
+// ===================================================================
+// 网易云 QR LOGIN
+// ===================================================================
+let qrPollTimer = null;
+
+async function startQrLogin() {
+  const modal   = document.getElementById('qr-modal');
+  const status  = document.getElementById('qr-status');
+  const imgEl   = document.getElementById('qr-img');
+
+  status.textContent = '正在生成二维码...';
+  imgEl.src = '';
+  modal.classList.remove('hidden');
+
+  try {
+    // Step 1: get unikey
+    const keyData = await api('/login/qr/key');
+    const key = keyData.data?.unikey;
+    if (!key) { status.textContent = '获取失败，请检查 API 服务'; return; }
+
+    // Step 2: get QR image (base64)
+    const qrData = await api(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true`);
+    const qrImg  = qrData.data?.qrimg;
+    if (!qrImg) { status.textContent = '二维码生成失败'; return; }
+
+    imgEl.src = qrImg;
+    status.textContent = '请用网易云音乐 App 扫码';
+
+    // Step 3: poll for scan confirmation (timestamp busts cache)
+    clearInterval(qrPollTimer);
+    qrPollTimer = setInterval(async () => {
+      try {
+        const check = await api(`/login/qr/check?key=${encodeURIComponent(key)}&timestamp=${Date.now()}`);
+        const code  = check.code ?? check.body?.code ?? 0;
+        if (code === 802) {
+          status.textContent = '已扫码，请在手机上确认登录...';
+        } else if (code === 803) {
+          clearInterval(qrPollTimer);
+          modal.classList.add('hidden');
+          if (check.cookie) {
+            sessionCookie = cleanCookieString(check.cookie);
+            localStorage.setItem('netease_cookie', sessionCookie);
+          }
+          let qrUid = null;
+          try {
+            const st = await api(`/login/status?timestamp=${Date.now()}`);
+            qrUid = st?.data?.profile?.userId ?? st?.profile?.userId;
+          } catch (_) {}
+          markLoggedIn(qrUid);
+          showToast('登录成功，已解锁更多歌曲 🎵');
+        } else if (code === 800) {
+          clearInterval(qrPollTimer);
+          status.textContent = '二维码已过期，正在自动刷新...';
+          setTimeout(() => startQrLogin(), 1500);
+        }
+      } catch (_) {}
+    }, 2000);
+
+  } catch (err) {
+    status.textContent = '网络错误: ' + err.message;
+  }
+}
+
+// ── Login modal: open + tab switching ──────────────────────────────
+function openLoginModal(tab = 'qr') {
+  document.getElementById('qr-modal').classList.remove('hidden');
+  switchLoginTab(tab);
+}
+
+function switchLoginTab(tab) {
+  document.getElementById('tab-qr').classList.toggle('active', tab === 'qr');
+  document.getElementById('tab-phone').classList.toggle('active', tab === 'phone');
+  document.getElementById('qr-section').style.display  = tab === 'qr'    ? 'block' : 'none';
+  document.getElementById('phone-section').style.display = tab === 'phone' ? 'block' : 'none';
+  if (tab === 'qr') {
+    startQrLogin();
+  } else {
+    clearInterval(qrPollTimer);
+    document.getElementById('phone-status').textContent = '';
+  }
+}
+
+document.getElementById('login-btn').addEventListener('click', () => openLoginModal('qr'));
+document.getElementById('tab-qr').addEventListener('click',    () => switchLoginTab('qr'));
+document.getElementById('tab-phone').addEventListener('click', () => switchLoginTab('phone'));
+document.getElementById('qr-close').addEventListener('click', () => {
+  clearInterval(qrPollTimer);
+  document.getElementById('qr-modal').classList.add('hidden');
+});
+
+// ── Phone / password login ──────────────────────────────────────────
+document.getElementById('phone-submit').addEventListener('click', async () => {
+  const phone    = document.getElementById('phone-input').value.trim();
+  const password = document.getElementById('password-input').value;
+  const statusEl = document.getElementById('phone-status');
+  if (!phone || !password) { statusEl.textContent = '请填写手机号和密码'; return; }
+  statusEl.textContent = '登录中...';
+  try {
+    const data = await api(
+      `/login/cellphone?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}&timestamp=${Date.now()}`
+    );
+    if (data.code === 200 || data.profile) {
+      if (data.cookie) {
+        sessionCookie = cleanCookieString(data.cookie);
+        localStorage.setItem('netease_cookie', sessionCookie);
+      }
+      document.getElementById('qr-modal').classList.add('hidden');
+      markLoggedIn(data.profile?.userId ?? data.account?.id ?? null);
+      showToast('登录成功，已解锁完整曲库 🎵');
+    } else {
+      statusEl.textContent = data.message || '账号或密码错误，请重试';
+    }
+  } catch (e) {
+    statusEl.textContent = '登录失败：' + e.message;
+  }
+});
+
+</script>
+</body>
+</html>
