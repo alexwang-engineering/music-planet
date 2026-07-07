@@ -1,5 +1,7 @@
 # Music Planet (音乐星球)
 
+> 🚧 **Work in progress** — under active development, not feature-complete. Feedback and review welcome via the open draft PR.
+
 A personal-use Electron desktop app that wraps NetEase Cloud Music (网易云音乐) in a 3D/WebGL player UI.
 
 ## How it works
