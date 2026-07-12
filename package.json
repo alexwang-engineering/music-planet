@@ -1,23 +1,43 @@
 {
   "name": "music-planet",
-  "productName": "Music Planet",
+  "productName": "Nebula",
   "version": "1.0.0",
   "description": "3D NetEase Cloud Music Player",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "predist": "rm -rf api-staging && mkdir -p api-staging && cd api-staging && npm init -y > /dev/null 2>&1 && npm i --omit=dev --no-audit --no-fund NeteaseCloudMusicApi@^4.28.0",
     "dist": "electron-builder --mac --dir"
   },
   "build": {
     "appId": "com.wjl.music-planet",
-    "productName": "Music Planet",
+    "productName": "Nebula",
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dir", "arch": ["arm64", "x64"] }]
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
     },
-    "files": ["main.js", "app/**/*"],
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
     "extraResources": [
-      { "from": "node_modules/NeteaseCloudMusicApi", "to": "api", "filter": ["**/*", "!**/node_modules/.cache/**"] }
+      {
+        "from": "api-staging/node_modules",
+        "to": "api-runtime/node_modules",
+        "filter": [
+          "**/*",
+          "!**/.cache/**"
+        ]
+      }
     ]
   },
   "devDependencies": {

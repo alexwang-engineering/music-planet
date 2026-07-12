@@ -1,4 +1,4 @@
-# Music Planet (音乐星球)
+# Nebula (星云)
 
 > 🚧 **Work in progress** — under active development, not feature-complete. Feedback and review welcome via the open draft PR.
 

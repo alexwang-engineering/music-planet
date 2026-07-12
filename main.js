@@ -18,11 +18,12 @@ function sanitizeApiLog(chunk) {
 
 // ── Start the NetEase API server ─────────────────────────────────────
 function startApiServer() {
-  const os = require('os')
-  // Dev: node_modules next to main.js
-  // Packaged: project stays at ~/music-player-app (personal-use app)
+  // Dev: node_modules next to main.js.
+  // Packaged: a standalone production install (predist stages api-staging/node_modules,
+  // extraResources ships it as Resources/api-runtime/node_modules). The package must sit
+  // inside a real node_modules dir so its own deps (axios, express…) resolve by walk-up.
   const apiEntry = app.isPackaged
-    ? path.join(os.homedir(), 'music-player-app', 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
+    ? path.join(process.resourcesPath, 'api-runtime', 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
     : path.join(__dirname, 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
 
   apiProcess = spawn(process.execPath, [apiEntry], {
@@ -42,7 +43,7 @@ function startApiServer() {
 }
 
 // ── Wait for API to respond ──────────────────────────────────────────
-function waitForApi(retries = 20, delay = 300) {
+function waitForApi(retries = 40, delay = 400) {
   return new Promise((resolve, reject) => {
     const attempt = () => {
       http.get(`http://localhost:${API_PORT}/search?keywords=test&limit=1`, res => {
@@ -57,7 +58,8 @@ function waitForApi(retries = 20, delay = 300) {
   })
 }
 
-// ── Create the main window ───────────────────────────────────────────
+// ── Create the main window (fixed proportions — per user request, do not
+// switch to work-area-percentage sizing or persisted bounds) ─────────────
 function createWindow() {
   nativeTheme.themeSource = 'dark'
 

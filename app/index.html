@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>音乐星球 · Music Planet</title>
+<title>星云 · Nebula</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -831,10 +831,10 @@
     left: calc(var(--left-w) + 32px);
     right: calc(var(--right-w) + 32px);
     max-height: 340px;
-    background: rgba(6, 1, 0, 0.96);
+    background: rgba(4, 2, 8, 0.96);
     backdrop-filter: blur(10px) saturate(140%);
     -webkit-backdrop-filter: blur(10px) saturate(140%);
-    border: 1px solid rgba(255, 80, 18, 0.22);
+    border: 1px solid var(--accent-glow);
     border-radius: 14px;
     overflow: hidden;
     display: flex;
@@ -861,7 +861,7 @@
     padding: 6px 16px; cursor: pointer; transition: background 0.12s;
   }
   .queue-item:hover { background: rgba(255,255,255,0.04); }
-  .queue-item.current { background: rgba(255, 90, 18, 0.10); }
+  .queue-item.current { background: var(--accent-glow); }
   .queue-item .q-num { width: 22px; text-align: right; font-size: 11px; color: rgba(255,255,255,0.20); flex-shrink: 0; }
   .queue-item.current .q-num { color: var(--accent); font-size: 9px; }
   .queue-item .q-name { flex: 1; font-size: 12px; color: rgba(255,255,255,0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1069,7 +1069,7 @@
     transition: background 0.15s;
   }
   .my-playlist-item:hover { background: rgba(255,255,255,0.06); }
-  .my-playlist-item.active { background: rgba(255,90,18,0.14); }
+  .my-playlist-item.active { background: var(--accent-glow); }
   .my-playlist-item .pl-icon {
     width: 32px; height: 32px; border-radius: 6px;
     background: rgba(255,255,255,0.07);
@@ -1087,10 +1087,11 @@
   #back-to-playlists {
     display: none; align-items: center; gap: 6px;
     padding: 8px 14px 4px;
-    font-size: 11px; color: rgba(255,90,18,0.8);
+    font-size: 11px; color: var(--accent);
     cursor: pointer; background: none; border: none;
+    opacity: 0.85;
   }
-  #back-to-playlists:hover { color: #ff9a3d; }
+  #back-to-playlists:hover { opacity: 1; color: var(--accent2); }
 
   /* ── Login modal ── */
   #qr-modal {
@@ -1171,9 +1172,21 @@
     border-radius: 1px;
     transition: width 0.06s linear;
   }
+
+  /* === TITLE BAR DRAG STRIP (hiddenInset window needs an explicit drag region) === */
+  #titlebar-drag {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 30px;
+    z-index: 900;               /* above canvases/panels, below modals (#qr-modal is higher) */
+    -webkit-app-region: drag;
+  }
 </style>
 </head>
 <body>
+
+<!-- hiddenInset title bar: this strip is the window's drag handle -->
+<div id="titlebar-drag"></div>
 
 <canvas id="three-canvas"></canvas>
 <canvas id="liquid-canvas"></canvas>
@@ -1214,7 +1227,7 @@
         <svg width="42" height="42" viewBox="0 0 24 24" fill="rgba(255,255,255,0.17)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
       </div>
     </div>
-    <div id="right-song-title">Music Planet</div>
+    <div id="right-song-title">Nebula</div>
     <div id="right-song-artist">Idle Orbit</div>
   </div>
 
@@ -1374,7 +1387,9 @@
 // ===================================================================
 // THREE.JS IMPORTS
 // ===================================================================
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+// Vendored locally — a CDN import here meant the packaged app was fully
+// broken offline (this module holds ALL app logic, not just the visuals).
+import * as THREE from './vendor/three.module.js';
 
 // ===================================================================
 // SCENE SETUP
@@ -2518,13 +2533,15 @@ let _breathe2Phase = 0;
 // ║  STABLE VISUAL BASELINE — DO NOT REGRESS                           ║
 // ║  Rounds 1–3 QA passed. Freeze these constraints permanently.       ║
 // ║                                                                    ║
-// ║  1. ORB COLOR: _tColor1/_tColor2 must stay fixed blue-violet.     ║
-// ║     applyTheme() must NOT assign new colors to these targets.      ║
-// ║     Album art and theme dots cannot drive the sphere shader.       ║
+// ║  1. ORB COLOR: _tColor1/_tColor2 now follow the active theme       ║
+// ║     (THEME_SPHERE) and per-song album art (see applyAccentColor),  ║
+// ║     same as CSS accent — this was an explicit user decision to     ║
+// ║     un-freeze the orb, reversing the old "always blue-violet" rule.║
 // ║                                                                    ║
-// ║  2. THEME SCOPE: album/theme color may only affect CSS accent      ║
-// ║     vars and environment elements (rings, comets, glow sphere).    ║
-// ║     It must not recolor particles, nebula, or the orb shader.      ║
+// ║  2. THEME SCOPE: album/theme color affects CSS accent vars,        ║
+// ║     environment elements (rings, comets, glow sphere), AND now     ║
+// ║     the orb shader targets (_tColor1/_tColor2). It must still not   ║
+// ║     recolor particles or the nebula (see rule 3).                  ║
 // ║                                                                    ║
 // ║  3. PARTICLES: particleMat and haloMat2 are fixed muted purple.   ║
 // ║     applyEnvColor() must NOT set their color. No render-loop       ║
@@ -2537,9 +2554,10 @@ let _breathe2Phase = 0;
 // ║     positions. All displacement must go through _sBass/_sMid/      ║
 // ║     _sHigh smoothed signals with clamp.                            ║
 // ║                                                                    ║
-// ║  6. HUE LOCK: beat flare must only adjust saturation/lightness.   ║
-// ║     _hslScratch2.h must remain unchanged in the beat flare block.  ║
-// ║     HSL hue must never accumulate over time.                       ║
+// ║  6. HUE STABILITY: beat flare must only adjust saturation/         ║
+// ║     lightness, never hue — it reads back whatever hue the theme/   ║
+// ║     album-art lerp already set and leaves it untouched, so beats   ║
+// ║     don't cause hue drift or accumulate over time.                 ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 // Dynamic sphere color targets — lerped smoothly each frame
@@ -2590,153 +2608,136 @@ let _laTime = 0;
 let _laLastFrameTime = 0;
 let _laPlayBlend = 0;  // lerped 0→1 on play, decays to 0 on pause over ~1s
 
-// Album accent for liquid aura — clamped separately from CSS accent
-let _laAccentR = 42, _laAccentG = 11, _laAccentB = 90;
+// Album/theme accent for liquid aura — vivid HSL (the old satMax=0.42 clamp made everything mud)
+let _laHue = 0.745, _laSat = 0.85, _laLight = 0.58;
 
 function updateLiquidAccent(threeColor) {
   const hsl = {};
   threeColor.getHSL(hsl);
-  // Governance clamps: satMax=0.42, brightnessMax=0.55 (tighter than CSS accent)
-  const s = Math.min(hsl.s, 0.42);
-  const l = Math.min(hsl.l, 0.55);
-  const c = new THREE.Color().setHSL(hsl.h, s, l);
-  _laAccentR = Math.round(c.r * 255);
-  _laAccentG = Math.round(c.g * 255);
-  _laAccentB = Math.round(c.b * 255);
+  _laHue = hsl.h;
+  _laSat = Math.min(Math.max(hsl.s, 0.45), 0.95);
+  _laLight = Math.min(Math.max(hsl.l, 0.48), 0.66);
 }
 
+let _laDpr = 1;
 function _resizeLiquidCanvas() {
   if (!_laCanvas) return;
-  _laCanvas.width  = window.innerWidth;
-  _laCanvas.height = window.innerHeight;
+  // Render at device resolution — the old CSS-pixel canvas was blurry on retina.
+  _laDpr = Math.min(window.devicePixelRatio || 1, 2);
+  _laCanvas.width  = Math.round(window.innerWidth  * _laDpr);
+  _laCanvas.height = Math.round(window.innerHeight * _laDpr);
 }
 window.addEventListener('resize', _resizeLiquidCanvas);
 _resizeLiquidCanvas();
+
+// Drifting particles (lazy init once viewport size is known)
+let _laParticles = null;
+function _laInitParticles(W, H) {
+  _laParticles = Array.from({ length: 70 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    spd: 6 + Math.random() * 22,
+    sway: 8 + Math.random() * 26,
+    ph: Math.random() * Math.PI * 2,
+    r: 0.7 + Math.random() * 1.9,
+  }));
+}
+
+// ── Aurora mesh-gradient blobs ──────────────────────────────────────
+// Technique: draw big radial-gradient blobs additively into a tiny offscreen
+// buffer, then upscale to full screen — bilinear upscaling acts as a free
+// giant-radius blur, so the colors melt into one seamless aurora field.
+// Palette: curated analogous hues around the album/theme accent + one cool
+// cyan counterpoint at low alpha (the classic aurora cyan/purple/pink logic).
+const _LA_BUF_W = 224, _LA_BUF_H = 140;
+const _laBuf = document.createElement('canvas');
+_laBuf.width = _LA_BUF_W; _laBuf.height = _LA_BUF_H;
+const _laBufCtx = _laBuf.getContext('2d');
+
+function _laColorAbs(hDeg, s, l, a) {
+  return `hsla(${hDeg.toFixed(0)},${(s * 100).toFixed(0)}%,${(l * 100).toFixed(0)}%,${a.toFixed(3)})`;
+}
+
+const _LA_BLOBS = [
+  { hue:   0, satMul: 1.00, light: 0.52, a: 0.80, r: 0.62, sx: 0.10, sy: 0.08, px: 0.0, py: 1.3, band: 'bass' },
+  { hue:  42, satMul: 0.90, light: 0.56, a: 0.60, r: 0.50, sx: 0.13, sy: 0.10, px: 2.1, py: 0.4, band: 'mid'  },
+  { hue: -48, satMul: 0.95, light: 0.46, a: 0.62, r: 0.55, sx: 0.08, sy: 0.12, px: 4.2, py: 2.6, band: 'bass' },
+  { hue:  20, satMul: 0.80, light: 0.62, a: 0.42, r: 0.36, sx: 0.18, sy: 0.15, px: 1.0, py: 3.8, band: 'high' },
+  { cyan: 195, satMul: 0.85, light: 0.55, a: 0.24, r: 0.48, sx: 0.06, sy: 0.10, px: 3.3, py: 5.1, band: 'mid' },
+  { hue:   8, satMul: 0.30, light: 0.86, a: 0.15, r: 0.26, sx: 0.15, sy: 0.20, px: 5.6, py: 0.9, band: 'high' },
+];
 
 function _renderLiquidAura(dt) {
   if (!_laCtx || !_laCanvas) return;
   _laTime += dt;
   const t = _laTime;
-  const W = _laCanvas.width;
-  const H = _laCanvas.height;
+  const W = _laCanvas.width / _laDpr;
+  const H = _laCanvas.height / _laDpr;
+  _laCtx.setTransform(_laDpr, 0, 0, _laDpr, 0, 0);
   const isPlaying = !audio.paused;
 
   // Smooth blend: playing → 1 (fast attack ~0.4s), paused → 0 (slow decay ~1.5s)
   const blendRate = isPlaying ? dt * 2.5 : dt * 0.65;
   _laPlayBlend += ((isPlaying ? 1.0 : 0.0) - _laPlayBlend) * Math.min(blendRate, 1.0);
+  const pb = _laPlayBlend;
 
-  // ── Audio-reactive values — all clamped, smoothed bands only ───────
-  const auraScale  = Math.min(1.0 + _sBass * 0.035 + beatFlash * 0.020, 1.055); // bass + beat → scale
-  const waveSpeed  = 0.12 + Math.min(_sMid * 0.12, 0.12) * _laPlayBlend;    // mid  → speed
-  const shimmerOp  = Math.min(0.03 + _sHigh * 0.05, 0.08) * _laPlayBlend;   // treble → shimmer
+  if (!_laParticles) _laInitParticles(W, H);
 
-  const cx = W * 0.5;
-  const cy = H * 0.5;
+  // ── Aurora field: blobs → tiny buffer → upscale (free giant blur) ──
+  const bw = _LA_BUF_W, bh = _LA_BUF_H;
+  const bctx = _laBufCtx;
+  const hDeg = _laHue * 360;
+  const energy = { bass: _sBass, mid: _sMid, high: _sHigh };
+  const drift = 0.45 + pb * 0.55 + _sMid * 0.6;          // paused → slow ambient drift
+
+  bctx.globalCompositeOperation = 'source-over';
+  bctx.fillStyle = _laColorAbs(hDeg, 0.55, 0.05, 1);     // near-black base tinted with the accent hue
+  bctx.fillRect(0, 0, bw, bh);
+  bctx.globalCompositeOperation = 'lighter';
+
+  const bmin = Math.min(bw, bh);
+  for (const b of _LA_BLOBS) {
+    const e = energy[b.band] || 0;
+    const h = b.cyan ? b.cyan : ((hDeg + b.hue) % 360 + 360) % 360;
+    const x = bw * (0.5 + 0.38 * Math.sin(t * b.sx * drift * Math.PI * 2 + b.px));
+    const y = bh * (0.5 + 0.36 * Math.sin(t * b.sy * drift * Math.PI * 2 + b.py));
+    const r = bmin * b.r * (1 + _sBass * 0.18 + beatFlash * 0.08) * (1.4 + e * 0.5);
+    const a = Math.min(b.a * (0.70 + pb * 0.15 + e * 0.35 + beatFlash * 0.20), 0.92);
+    const s = Math.min(_laSat * b.satMul, 1);
+    const g = bctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0,    _laColorAbs(h, s, b.light, a));
+    g.addColorStop(0.55, _laColorAbs(h, s, b.light * 0.8, a * 0.35));
+    g.addColorStop(1,    _laColorAbs(h, s, b.light * 0.6, 0));
+    bctx.fillStyle = g;
+    bctx.fillRect(0, 0, bw, bh);
+  }
+
+  // Upscale the buffer to the full canvas — bilinear smoothing = seamless blend
+  _laCtx.globalCompositeOperation = 'source-over';
+  _laCtx.imageSmoothingEnabled = true;
+  _laCtx.imageSmoothingQuality = 'high';
+  _laCtx.drawImage(_laBuf, 0, 0, W, H);
+
+  // ── Particles — faint stars drifting up through the aurora
+  _laCtx.globalCompositeOperation = 'lighter';
+  for (const p of _laParticles) {
+    p.y -= p.spd * dt * (0.4 + pb * 0.7 + _sMid * 0.6);
+    const px = p.x + Math.sin(t * 0.5 + p.ph) * p.sway;
+    if (p.y < -8) { p.y = H + 8; p.x = Math.random() * W; }
+    const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.6 + p.ph));
+    const a = (0.05 + tw * 0.16 + _sHigh * 0.20) * (0.45 + pb * 0.55);
+    _laCtx.fillStyle = _laColorAbs(hDeg, 0.20, 0.90, Math.min(a, 0.40));
+    _laCtx.beginPath();
+    _laCtx.arc(px, p.y, p.r, 0, Math.PI * 2);
+    _laCtx.fill();
+  }
+
+  // ── Vignette — gentle edge falloff
+  _laCtx.globalCompositeOperation = 'source-over';
   const md = Math.min(W, H);
-
-  // ── Layer 1: Dark base ──────────────────────────────────────────────
-  _laCtx.clearRect(0, 0, W, H);
-  _laCtx.fillStyle = '#030108';
-  _laCtx.fillRect(0, 0, W, H);
-
-  // ── Layer 2: Soft liquid field — two crossing directional flows ─────
-  // Colors must be significantly brighter than the base to be visible on #030108.
-  // Flow A — violet, drifts toward upper-right
-  const aX = cx + (Math.sin(t * waveSpeed * 0.40) * W * 0.26 + Math.cos(t * waveSpeed * 0.15) * W * 0.07);
-  const aY = cy + (Math.cos(t * waveSpeed * 0.28) * H * 0.20 + Math.sin(t * waveSpeed * 0.18) * H * 0.05);
-  const gA = _laCtx.createRadialGradient(aX, aY, 0, aX, aY, md * 0.62);
-  gA.addColorStop(0,    'rgba(88,22,145,0.82)');
-  gA.addColorStop(0.40, 'rgba(48,10,88,0.48)');
-  gA.addColorStop(1.0,  'rgba(3,1,8,0.0)');
-  _laCtx.fillStyle = gA;
-  _laCtx.fillRect(0, 0, W, H);
-
-  // Flow B — dark indigo, counters Flow A to create directional tension
-  const bX = cx + (Math.cos(t * waveSpeed * 0.33 + 1.8) * W * 0.22 + Math.sin(t * waveSpeed * 0.13 + 0.6) * W * 0.05);
-  const bY = cy + (Math.sin(t * waveSpeed * 0.22 + 1.0) * H * 0.19 + Math.cos(t * waveSpeed * 0.12) * H * 0.06);
-  const gB = _laCtx.createRadialGradient(bX, bY, 0, bX, bY, md * 0.50);
-  gB.addColorStop(0,    'rgba(16,22,80,0.72)');
-  gB.addColorStop(0.48, 'rgba(8,10,42,0.38)');
-  gB.addColorStop(1.0,  'rgba(3,1,8,0.0)');
-  _laCtx.fillStyle = gB;
-  _laCtx.fillRect(0, 0, W, H);
-
-  // ── Layer 3: Aura core — soft central focal area ────────────────────
-  // This is the visual subject of the mode. Must be clearly visible.
-  const coreR  = md * 0.32 * auraScale;
-  const coreOp = Math.min(0.42 + _laPlayBlend * 0.16 + beatFlash * 0.18, 0.64); // 0.42 idle → 0.58 playing → 0.64 on beat
-  const cdX    = Math.sin(t * waveSpeed * 0.21 + 0.3) * W * 0.048;
-  const cdY    = Math.cos(t * waveSpeed * 0.16 + 0.8) * H * 0.036;
-  const gCore  = _laCtx.createRadialGradient(cx + cdX, cy + cdY, 0, cx + cdX, cy + cdY, coreR);
-  gCore.addColorStop(0,    `rgba(118,44,200,${coreOp.toFixed(3)})`);
-  gCore.addColorStop(0.30, `rgba(72,18,140,${(coreOp * 0.55).toFixed(3)})`);
-  gCore.addColorStop(0.65, `rgba(30,6,65,${(coreOp * 0.18).toFixed(3)})`);
-  gCore.addColorStop(1.0,  'rgba(3,1,8,0.0)');
-  _laCtx.fillStyle = gCore;
-  _laCtx.fillRect(0, 0, W, H);
-
-  // ── Layer 4: Gentle wave motion — two wide organic ripples ─────────
-  // Soft pools of light rising and falling — no bars, no lines.
-  const w1Y   = cy + Math.sin(t * waveSpeed * 0.27 + 0.4) * H * 0.22 + Math.cos(t * waveSpeed * 0.13) * H * 0.06;
-  const w1Op  = Math.min(0.22 + _laPlayBlend * 0.12, 0.34);
-  const gW1   = _laCtx.createRadialGradient(cx, w1Y, 0, cx, w1Y, md * 0.40);
-  gW1.addColorStop(0,   `rgba(100,40,165,${w1Op.toFixed(3)})`);
-  gW1.addColorStop(0.5, `rgba(52,14,95,${(w1Op * 0.36).toFixed(3)})`);
-  gW1.addColorStop(1.0, 'rgba(3,1,8,0.0)');
-  _laCtx.fillStyle = gW1;
-  _laCtx.fillRect(0, 0, W, H);
-
-  const w2Y   = cy + Math.cos(t * waveSpeed * 0.20 + 2.2) * H * 0.25 + Math.sin(t * waveSpeed * 0.10 + 1.1) * H * 0.04;
-  const w2Op  = Math.min(0.16 + _laPlayBlend * 0.10, 0.26);
-  const gW2   = _laCtx.createRadialGradient(cx * 0.82, w2Y, 0, cx * 0.82, w2Y, md * 0.36);
-  gW2.addColorStop(0,   `rgba(28,12,72,${w2Op.toFixed(3)})`);
-  gW2.addColorStop(0.5, `rgba(14,5,36,${(w2Op * 0.34).toFixed(3)})`);
-  gW2.addColorStop(1.0, 'rgba(3,1,8,0.0)');
-  _laCtx.fillStyle = gW2;
-  _laCtx.fillRect(0, 0, W, H);
-
-  // ── Beat ripple — soft expanding ring on bass beat ─────────────────
-  // beatFlash starts at 0.5 on beat; ring expands outward as it decays to 0.
-  if (beatFlash > 0.04) {
-    const rippleProgress = Math.max(0, (0.5 - beatFlash) / 0.5); // 0 at onset → 1 when faded
-    const rippleR = md * (0.24 + rippleProgress * 0.22);          // expands 0.24md → 0.46md
-    const rippleOp = Math.min(beatFlash * 0.10, 0.10);
-    const gRipple = _laCtx.createRadialGradient(cx, cy, rippleR * 0.85, cx, cy, rippleR);
-    gRipple.addColorStop(0,   'rgba(150,90,220,0.0)');
-    gRipple.addColorStop(0.5, `rgba(150,90,220,${rippleOp.toFixed(3)})`);
-    gRipple.addColorStop(1.0, 'rgba(150,90,220,0.0)');
-    _laCtx.fillStyle = gRipple;
-    _laCtx.fillRect(0, 0, W, H);
-  }
-
-  // ── Layer 5: Audio breathing — album accent + treble shimmer ───────
-  const accentOp = Math.min(0.14 * _laPlayBlend, 0.14);
-  if (accentOp > 0.003) {
-    const aaX  = cx + Math.sin(t * waveSpeed * 0.24 + 0.4) * W * 0.08;
-    const aaY  = cy + Math.cos(t * waveSpeed * 0.17 + 0.9) * H * 0.07;
-    const aaR  = md * 0.30 * auraScale;
-    const gAcc = _laCtx.createRadialGradient(aaX, aaY, 0, aaX, aaY, aaR);
-    gAcc.addColorStop(0,   `rgba(${_laAccentR},${_laAccentG},${_laAccentB},${accentOp.toFixed(3)})`);
-    gAcc.addColorStop(0.5, `rgba(${_laAccentR},${_laAccentG},${_laAccentB},${(accentOp * 0.28).toFixed(3)})`);
-    gAcc.addColorStop(1.0, `rgba(${_laAccentR},${_laAccentG},${_laAccentB},0.0)`);
-    _laCtx.fillStyle = gAcc;
-    _laCtx.fillRect(0, 0, W, H);
-  }
-
-  if (shimmerOp > 0.003) {
-    const sy = cy + Math.sin(t * waveSpeed * 0.31) * H * 0.16;
-    const sg = _laCtx.createLinearGradient(0, sy - 50, 0, sy + 50);
-    sg.addColorStop(0,   'rgba(170,130,255,0.0)');
-    sg.addColorStop(0.5, `rgba(170,130,255,${shimmerOp.toFixed(3)})`);
-    sg.addColorStop(1.0, 'rgba(170,130,255,0.0)');
-    _laCtx.fillStyle = sg;
-    _laCtx.fillRect(0, sy - 50, W, 100);
-  }
-
-  // ── Vignette — darken edges, preserve premium feel ─────────────────
-  const vg = _laCtx.createRadialGradient(cx, cy, md * 0.24, cx, cy, md * 0.78);
-  vg.addColorStop(0,   'rgba(0,0,0,0.0)');
-  vg.addColorStop(1.0, 'rgba(0,0,0,0.65)');
+  const vg = _laCtx.createRadialGradient(W / 2, H / 2, md * 0.35, W / 2, H / 2, md * 0.95);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.45)');
   _laCtx.fillStyle = vg;
   _laCtx.fillRect(0, 0, W, H);
 }
@@ -2853,6 +2854,7 @@ function animate() {
       const mr = Math.round(a.r * 255), mg = Math.round(a.g * 255), mb = Math.round(a.b * 255);
       html.style.setProperty('--accent-glow', `rgba(${mr},${mg},${mb},0.22)`);
       applyEnvColor(a);
+      updateLiquidAccent(a);
     }
   }
 
@@ -2860,15 +2862,16 @@ function animate() {
   const _cf = 1.0 - Math.exp(-delta / 1.8);
   sphereMat.uniforms.uColor1.value.lerp(_tColor1, _cf);
   sphereMat.uniforms.uColor2.value.lerp(_tColor2, _cf);
-  // Color energy model — hue locked to blue-violet, lightness breathes with music
+  // Color energy model — hue follows the current theme/album target, lightness breathes with music
   // Bug fix: prior block clamped sat from ~1.0 down to 0.45 and lightness from 0.587 down to 0.55 on beats — making beats look DEAD.
-  // Now: hue strictly clamped [0.695,0.745]; saturation stays natural; lightness rises with energy.
+  // Also used to hard-clamp hue to [0.695,0.745] (blue-violet) every frame, which silently overrode
+  // any theme/album-art color the lerp above had just set — that's why the orb never visibly changed.
   const _colorEnergy = Math.min(_sAudio * 0.12 + _sBass * 0.10 + beatFlash * 0.16, 0.22);
   {
     const _c2 = sphereMat.uniforms.uColor2.value;
     _c2.getHSL(_hslScratch2);
     _c2.setHSL(
-      Math.max(0.695, Math.min(0.745, _hslScratch2.h)),     // hue locked [0.695,0.745] — prevents drift
+      _hslScratch2.h,                                        // hue passes through untouched — follows theme/album target
       Math.min(_hslScratch2.s, 0.98),                        // saturation: natural ~1.0, no bad clamp
       Math.min(_hslScratch2.l + _colorEnergy * 0.20, 0.72)  // lightness: base 0.587 → up to 0.72 on peak energy
     );
@@ -3133,27 +3136,31 @@ function extractAccentColor(imgUrl, callback) {
     const data = ctx.getImageData(0, 0, 50, 50).data;
 
     let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    let rAllSum = 0, gAllSum = 0, bAllSum = 0, allCount = 0;
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i], g = data[i+1], b = data[i+2];
       const brightness = (r + g + b) / 3;
       const saturation = Math.max(r, g, b) - Math.min(r, g, b);
-      // Skip too dark, too light, or too grey — only vivid mid-tone pixels
-      if (brightness > 30 && brightness < 170 && saturation > 40) {
+      rAllSum += r; gAllSum += g; bAllSum += b; allCount++;
+      // Widened vivid-pixel window — the old range (30-170 brightness, sat>40)
+      // excluded nearly all pixels of minimalist/pastel/monochrome covers.
+      if (brightness > 15 && brightness < 240 && saturation > 12) {
         rSum += r; gSum += g; bSum += b; count++;
       }
     }
 
-    if (count > 0) {
-      const r = rSum / count / 255, g = gSum / count / 255, b = bSum / count / 255;
-      const threeColor = new THREE.Color(r, g, b);
-      const hsl = {};
-      threeColor.getHSL(hsl);
-      // Clamp lightness ≤ 0.45 and boost saturation — prevents pale/white colors
-      threeColor.setHSL(hsl.h, Math.min(1.0, hsl.s * 1.4), Math.min(0.45, Math.max(0.25, hsl.l)));
-      callback(`#${threeColor.getHexString()}`, threeColor);
-    } else {
-      callback('rgb(122,44,255)', new THREE.Color(0x7A2CFF));
-    }
+    // No vivid pixels? Fall back to the whole image's average instead of a
+    // fixed constant, so muted covers still get their own per-song hue.
+    const n = count > 0 ? count : allCount;
+    const r = (count > 0 ? rSum : rAllSum) / n / 255;
+    const g = (count > 0 ? gSum : gAllSum) / n / 255;
+    const b = (count > 0 ? bSum : bAllSum) / n / 255;
+    const threeColor = new THREE.Color(r, g, b);
+    const hsl = {};
+    threeColor.getHSL(hsl);
+    // Clamp lightness ≤ 0.45 and boost saturation — prevents pale/white colors
+    threeColor.setHSL(hsl.h, Math.min(1.0, hsl.s * 1.4), Math.min(0.45, Math.max(0.25, hsl.l)));
+    callback(`#${threeColor.getHexString()}`, threeColor);
     } catch (e) {
       callback('rgb(122,44,255)', new THREE.Color(0x7A2CFF));
     }
@@ -3163,8 +3170,7 @@ function extractAccentColor(imgUrl, callback) {
 }
 
 function applyAccentColor(cssColor, threeColor) {
-  // Album art drives CSS accent tokens only — the 3D sphere stays in its theme color.
-  // Brief: "Album art color can influence accent only. It must not recolor the entire visualizer."
+  // Album art drives CSS accent tokens and (per user request) the orb's target colors too.
   const hsl = {};
   threeColor.getHSL(hsl);
   const h = hsl.h;
@@ -3180,7 +3186,11 @@ function applyAccentColor(cssColor, threeColor) {
 
   const ar = Math.round(accent.r * 255), ag = Math.round(accent.g * 255), ab = Math.round(accent.b * 255);
   html.style.setProperty('--accent-glow', `rgba(${ar},${ag},${ab},0.18)`);
-  // _tColor1/_tColor2 intentionally NOT updated — sphere keeps its theme palette.
+  // Orb target colors — same hue, same dark/bright split as the theme-dot palette (THEME_SPHERE),
+  // so per-song album art now drives the sphere too. In 'mix' mode this gets overwritten again on
+  // the next frame by the hue-cycling loop, same precedence the CSS accent vars already had.
+  _tColor1.setHSL(h, 0.90, 0.12);
+  _tColor2.setHSL(h, 1.00, 0.50);
   // Feed raw album color to Liquid Aura (clamped independently inside updateLiquidAccent)
   updateLiquidAccent(threeColor);
 }
@@ -3455,6 +3465,18 @@ async function playIndex(idx) {
 
     document.querySelector('.bar-song-info').classList.remove('fade-out');
 
+    // Window title (Cmd+Tab / dock context) + heart state + system media controls
+    document.title = `${song.name || ''} · ${artistStr} — Nebula`;
+    updateLikeUI();
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.name || '',
+        artist: artistStr,
+        album: detail?.al?.name || song.al?.name || '',
+        artwork: artUrl ? [{ src: artUrl + '?param=512y512', sizes: '512x512', type: 'image/jpeg' }] : [],
+      });
+    }
+
     // Lyrics + translation
     const _lrcLines = parseLRC(lyricStr.lrc);
     const _tLines   = parseLRC(lyricStr.tlyric || '');
@@ -3521,6 +3543,33 @@ audio.addEventListener('error', () => {
   showToast('播放出错，跳至下一首');
   setTimeout(() => playIndex(state.currentIndex + 1), 1000);
 });
+
+// Save position when pausing / quitting — previously only the 5s interval while
+// playing saved it, so "pause → quit" lost up to the whole last session.
+audio.addEventListener('pause', saveResume);
+window.addEventListener('beforeunload', saveResume);
+
+// ── System media controls (media keys, AirPods, macOS Now Playing) ──
+if ('mediaSession' in navigator) {
+  const ms = navigator.mediaSession;
+  ms.setActionHandler('play',  () => { initAudio(); audio.play().catch(() => {}); });
+  ms.setActionHandler('pause', () => audio.pause());
+  ms.setActionHandler('previoustrack', () => document.getElementById('btn-prev').click());
+  ms.setActionHandler('nexttrack',     () => document.getElementById('btn-next').click());
+  ms.setActionHandler('seekto', d => {
+    if (typeof d.seekTime === 'number' && isFinite(audio.duration)) audio.currentTime = d.seekTime;
+  });
+  // Keep the system progress bar in sync (throttled)
+  let _msLast = 0;
+  audio.addEventListener('timeupdate', () => {
+    const now = performance.now();
+    if (now - _msLast < 1000 || !isFinite(audio.duration) || !audio.duration) return;
+    _msLast = now;
+    try {
+      ms.setPositionState({ duration: audio.duration, playbackRate: audio.playbackRate, position: audio.currentTime });
+    } catch (_) {}
+  });
+}
 
 // ===================================================================
 // CONTROLS
@@ -3607,7 +3656,8 @@ const THEME_SPHERE = {
 // Call whenever the theme or album art color changes.
 // BASELINE: applyEnvColor may set coreMat/haloMat glow, rings, comets, wave, bar.
 // It must NOT set particleMat.color or haloMat2.color — those stay fixed muted purple.
-// It must NOT modify sphereMat.uniforms.uColor1/uColor2 — the orb shader is locked.
+// (Orb color itself — sphereMat.uniforms.uColor1/uColor2 — is driven separately via
+// _tColor1/_tColor2, set by applyTheme()/applyAccentColor() and lerped each frame.)
 function applyEnvColor(c2Color) {
   const h = {};
   c2Color.getHSL(h);
@@ -3628,8 +3678,9 @@ function applyEnvColor(c2Color) {
   sphereLight.color.copy(glowCol);
 }
 
-// BASELINE: applyTheme sets CSS data-theme and calls applyEnvColor for environment elements only.
-// It must NOT assign _tColor1/_tColor2 — the orb shader targets are permanently fixed blue-violet.
+// applyTheme sets CSS data-theme, syncs environment colors, and (for non-mix themes)
+// sets the orb's target colors too — the sphere smoothly lerps toward _tColor1/_tColor2 each frame.
+// 'mix' is left alone here since the render loop already drives _tColor1/_tColor2 continuously for it.
 function applyTheme(name) {
   if (!THEME_SPHERE[name]) name = 'violet';
   state.theme = name;
@@ -3642,9 +3693,12 @@ function applyTheme(name) {
     d.classList.toggle('active', d.dataset.theme === name);
   });
   if (name !== 'mix') {
-    // Sphere orb stays fixed violet — only environment (rings, comets, glow sphere) follows theme.
-    // Prevents whole scene going red/green/blue on theme dot click.
-    applyEnvColor(new THREE.Color(THEME_SPHERE[name]?.c2 ?? THEME_SPHERE.violet.c2));
+    const sphereColors = THEME_SPHERE[name] ?? THEME_SPHERE.violet;
+    _tColor1.setHex(sphereColors.c1);
+    _tColor2.setHex(sphereColors.c2);
+    const themeColor = new THREE.Color(sphereColors.c2);
+    applyEnvColor(themeColor);
+    updateLiquidAccent(themeColor);
   }
 }
 
@@ -3737,16 +3791,25 @@ function savePrefs() {
   }));
 }
 
+const RESUME_QUEUE_CAP = 500;   // keep localStorage well under quota (~100KB at 500 songs)
+
 function saveResume() {
   if (state.currentIndex < 0 || !state.playlist.length) return;
-  const s = state.playlist[state.currentIndex];
-  const artUrl = document.getElementById('bar-art').src || '';
-  localStorage.setItem('mp_resume', JSON.stringify({
-    song: { id: s.id, name: s.name, artists: s.artists || s.ar || [],
-            al: s.al || { picUrl: artUrl.split('?')[0] }, fee: s.fee || 0,
-            dt: s.dt || Math.round(audio.duration * 1000) || 0 },
-    time: Math.floor(audio.currentTime),
+  // Persist the whole queue (trimmed fields), not just the current song,
+  // so a restart restores the full playing context with working next/prev.
+  const queue = state.playlist.slice(0, RESUME_QUEUE_CAP).map(s => ({
+    id: s.id, name: s.name,
+    ar: (s.artists || s.ar || []).map(a => ({ name: a.name })),
+    al: { picUrl: s.al?.picUrl || s.album?.picUrl || '' },
+    dt: s.dt || 0, fee: s.fee || 0,
   }));
+  try {
+    localStorage.setItem('mp_resume', JSON.stringify({
+      queue,
+      idx: Math.min(state.currentIndex, queue.length - 1),
+      time: Math.floor(audio.currentTime),
+    }));
+  } catch (_) { /* quota exceeded — skip this save */ }
 }
 
 setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
@@ -3779,11 +3842,14 @@ setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
   }
 
   const resume = JSON.parse(localStorage.getItem('mp_resume') || 'null');
-  if (resume?.song) {
-    state.playlist = [resume.song];
+  // New format: { queue, idx, time }. Old format ({ song, time }) still restores as a 1-song queue.
+  const rQueue = resume?.queue?.length ? resume.queue : (resume?.song ? [resume.song] : null);
+  if (rQueue) {
+    state.playlist = rQueue;
+    const rIdx = Math.min(Math.max(resume.idx ?? 0, 0), rQueue.length - 1);
     const t = resume.time || 0;
     setTimeout(async () => {
-      await playIndex(0);
+      await playIndex(rIdx);
       if (t > 3) {
         setTimeout(() => { audio.currentTime = t; }, 800);
       }
@@ -3821,9 +3887,16 @@ _progressWrap.addEventListener('mouseleave', () => {
   _progressTooltip.classList.add('hidden');
 });
 
-// Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%
+// Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%, M=静音, L=喜欢, Cmd/Ctrl+F=搜索
 window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    document.getElementById('search-input').focus();
+    return;
+  }
   if (e.target.matches('input, textarea')) return;
+  if (e.key.toLowerCase() === 'm') { toggleMute(); return; }
+  if (e.key.toLowerCase() === 'l') { toggleLike(); return; }
   if (e.code === 'Space') {
     e.preventDefault();
     initAudio();
@@ -3928,7 +4001,15 @@ function toggleQueue(show) {
 
 document.getElementById('btn-queue').addEventListener('click', () => toggleQueue());
 document.getElementById('queue-close').addEventListener('click', () => toggleQueue(false));
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && _queueOpen) toggleQueue(false); });
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (_queueOpen) { toggleQueue(false); return; }
+  const qrModal = document.getElementById('qr-modal');
+  if (qrModal && !qrModal.classList.contains('hidden')) {
+    clearInterval(qrPollTimer);
+    qrModal.classList.add('hidden');
+  }
+});
 
 // Volume
 const volSlider = document.getElementById('volume-slider');
@@ -3939,14 +4020,67 @@ volSlider.addEventListener('input', () => {
   savePrefs();
 });
 
-// Like
-document.getElementById('btn-like').addEventListener('click', () => {
-  state.liked = !state.liked;
-  document.getElementById('btn-like').classList.toggle('liked', state.liked);
-  document.getElementById('icon-heart').style.display = state.liked ? 'none' : '';
-  document.getElementById('icon-heart-filled').style.display = state.liked ? '' : 'none';
-  showToast(state.liked ? '已加入喜欢 ♥' : '已取消喜欢');
-});
+// Mute toggle — click the speaker icon or press M
+let _preMuteVolume = null;
+function toggleMute() {
+  if (state.volume > 0) {
+    _preMuteVolume = state.volume;
+    state.volume = 0;
+  } else {
+    state.volume = _preMuteVolume || 0.8;
+    _preMuteVolume = null;
+  }
+  audio.volume = state.volume;
+  volSlider.value = state.volume * 100;
+  savePrefs();
+  showToast(state.volume === 0 ? '静音 🔇' : `音量 ${Math.round(state.volume * 100)}%`);
+}
+const _volIcon = document.querySelector('.vol-icon');
+if (_volIcon) {
+  _volIcon.style.cursor = 'pointer';
+  _volIcon.addEventListener('click', toggleMute);
+}
+
+// ── Favorites: per-song, persisted, synced to NetEase when logged in ──
+// (The old handler was a single global boolean — the heart lied to the user.)
+let favMap = JSON.parse(localStorage.getItem('mp_favs') || '{}');
+
+function currentSong() {
+  return state.currentIndex >= 0 ? state.playlist[state.currentIndex] : null;
+}
+
+function updateLikeUI() {
+  const song = currentSong();
+  const liked = !!(song && favMap[song.id]);
+  document.getElementById('btn-like').classList.toggle('liked', liked);
+  document.getElementById('icon-heart').style.display = liked ? 'none' : '';
+  document.getElementById('icon-heart-filled').style.display = liked ? '' : 'none';
+}
+
+function toggleLike() {
+  const song = currentSong();
+  if (!song) { showToast('先播放一首歌'); return; }
+  const liked = !favMap[song.id];
+  if (liked) {
+    favMap[song.id] = {
+      id: song.id, name: song.name,
+      ar: (song.artists || song.ar || []).map(a => ({ name: a.name })),
+      al: { picUrl: song.al?.picUrl || song.album?.picUrl || '' },
+      dt: song.dt || 0, at: Date.now(),
+    };
+  } else {
+    delete favMap[song.id];
+  }
+  try { localStorage.setItem('mp_favs', JSON.stringify(favMap)); } catch (_) {}
+  updateLikeUI();
+  showToast(liked ? '已加入喜欢 ♥' : '已取消喜欢');
+  // Best-effort sync to the NetEase red-heart list when logged in
+  if (sessionCookie) {
+    api(`/like?id=${song.id}&like=${liked}&timestamp=${Date.now()}`).catch(() => {});
+  }
+}
+
+document.getElementById('btn-like').addEventListener('click', toggleLike);
 
 // ===================================================================
 // SEARCH
@@ -3957,7 +4091,7 @@ document.getElementById('search-input').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
   if (!q) {
-    state.playlist = [];
+    // Show history in the browse list but leave the play queue untouched.
     renderHistory();
     return;
   }
@@ -4067,10 +4201,11 @@ function renderHistory() {
     }).join('');
   wrap.querySelectorAll('.song-item[data-hist-idx]').forEach(el => {
     el.addEventListener('click', () => {
-      const s = playHistory[parseInt(el.dataset.histIdx)];
-      state.playlist = [s];
+      // Queue becomes the whole history list so next/prev keep working.
+      const idx = parseInt(el.dataset.histIdx);
+      state.playlist = playHistory.slice();
       state.currentIndex = -1;
-      playIndex(0);
+      playIndex(idx);
     });
   });
 }
@@ -4159,7 +4294,7 @@ async function loadPlaylistTracks(playlistId, playlistName) {
   loading.textContent = '加载中...';
   wrap.appendChild(loading);
   try {
-    const data = await api(`/playlist/track/all?id=${playlistId}&limit=200&timestamp=${Date.now()}`);
+    const data = await api(`/playlist/track/all?id=${playlistId}&limit=1000&timestamp=${Date.now()}`);
     const songs = data.songs || [];
     state.playlist = songs;
     wrap.removeChild(loading);
@@ -4207,29 +4342,36 @@ document.getElementById('tab-mylist').addEventListener('click', () => {
   document.getElementById('tab-search').classList.remove('active');
   document.getElementById('playlist-wrap').style.display = 'none';
   document.getElementById('mylist-wrap').style.display = 'block';
-  if (!userPlaylists.length && userUid) loadUserPlaylists(userUid);
+  // Always refetch so playlist changes made elsewhere (phone/web) show up immediately.
+  if (userUid) loadUserPlaylists(userUid);
 });
 
 document.getElementById('back-to-playlists').addEventListener('click', () => {
+  // Going back to the playlist list is a browse action — the play queue keeps
+  // whatever was loaded so playback and next/prev continue uninterrupted.
   renderPlaylistList();
-  state.playlist = [];
 });
 
 // ===================================================================
 // CHECK API + LOGIN STATUS ON LOAD
 // ===================================================================
 (async () => {
-  try {
-    await fetch(API + '/search?keywords=test&limit=1', {
-      credentials: 'include',
-      signal: AbortSignal.timeout(3000),
-    });
-    // API is up — check if already logged in from a previous session
-    const status = await api(`/login/status?timestamp=${Date.now()}`);
-    const uid = status?.data?.profile?.userId ?? status?.profile?.userId;
-    if (uid) markLoggedIn(uid);
-  } catch {
-    // API not running or login check failed — silent
+  // Retry a few times: on a cold packaged-app launch the bundled API server
+  // can take 10s+ to boot, and a single 3s check used to race it and lose
+  // (login button stuck on "登录" despite a valid saved cookie).
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await fetch(API + '/search?keywords=test&limit=1', {
+        credentials: 'include',
+        signal: AbortSignal.timeout(3000),
+      });
+      const status = await api(`/login/status?timestamp=${Date.now()}`);
+      const uid = status?.data?.profile?.userId ?? status?.profile?.userId;
+      if (uid) markLoggedIn(uid);
+      return;
+    } catch {
+      await new Promise(r => setTimeout(r, 2500));
+    }
   }
 })();
 
