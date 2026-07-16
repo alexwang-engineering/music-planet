@@ -1381,7 +1381,10 @@
   </div>
 </div>
 
-<audio id="audio" preload="auto"></audio>
+<!-- crossorigin is REQUIRED: without it the cross-origin media stream taints
+     the Web Audio graph and the analyser reads all-zero — music plays but every
+     visualization goes deaf. NetEase CDN sends ACAO:* so this is safe. -->
+<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
 
 <script type="module">
 // ===================================================================
@@ -2418,24 +2421,30 @@ let audioConnected = false;
 
 function initAudio() {
   if (audioConnected) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  sourceNode = audioCtx.createMediaElementSource(audio);
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-  analyser.smoothingTimeConstant = 0.82;
-  analyser.minDecibels = -90;
-  analyser.maxDecibels = -10;   // KEY FIX: default -30 saturates all music
-  compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.setValueAtTime(-18, audioCtx.currentTime);
-  compressor.knee.setValueAtTime(30, audioCtx.currentTime);
-  compressor.ratio.setValueAtTime(8, audioCtx.currentTime);
-  compressor.attack.setValueAtTime(0.003, audioCtx.currentTime);
-  compressor.release.setValueAtTime(0.25, audioCtx.currentTime);
-  sourceNode.connect(analyser);
-  analyser.connect(compressor);
-  compressor.connect(audioCtx.destination);
-  dataArray = new Uint8Array(analyser.frequencyBinCount);
-  audioConnected = true;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioCtx.createMediaElementSource(audio);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.82;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -10;   // KEY FIX: default -30 saturates all music
+    compressor = audioCtx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18, audioCtx.currentTime);
+    compressor.knee.setValueAtTime(30, audioCtx.currentTime);
+    compressor.ratio.setValueAtTime(8, audioCtx.currentTime);
+    compressor.attack.setValueAtTime(0.003, audioCtx.currentTime);
+    compressor.release.setValueAtTime(0.25, audioCtx.currentTime);
+    sourceNode.connect(analyser);
+    analyser.connect(compressor);
+    compressor.connect(audioCtx.destination);
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    audioConnected = true;
+  } catch (e) {
+    // Visualization is optional — never let Web Audio failures break playback.
+    console.warn('[audio] analyser init failed, playback continues without viz:', e);
+    analyser = null;
+  }
 }
 
 let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
@@ -2701,14 +2710,20 @@ function _renderLiquidAura(dt) {
     const h = b.cyan ? b.cyan : ((hDeg + b.hue) % 360 + 360) % 360;
     const x = bw * (0.5 + 0.38 * Math.sin(t * b.sx * drift * Math.PI * 2 + b.px));
     const y = bh * (0.5 + 0.36 * Math.sin(t * b.sy * drift * Math.PI * 2 + b.py));
-    const r = bmin * b.r * (1 + _sBass * 0.18 + beatFlash * 0.08) * (1.4 + e * 0.5);
-    const a = Math.min(b.a * (0.70 + pb * 0.15 + e * 0.35 + beatFlash * 0.20), 0.92);
+    const r = bmin * b.r * (1 + _sBass * 0.34 + beatFlash * 0.24) * (1.4 + e * 0.65);
+    const a = Math.min(b.a * (0.62 + pb * 0.15 + e * 0.55 + beatFlash * 0.38), 0.95);
     const s = Math.min(_laSat * b.satMul, 1);
     const g = bctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0,    _laColorAbs(h, s, b.light, a));
     g.addColorStop(0.55, _laColorAbs(h, s, b.light * 0.8, a * 0.35));
     g.addColorStop(1,    _laColorAbs(h, s, b.light * 0.6, 0));
     bctx.fillStyle = g;
+    bctx.fillRect(0, 0, bw, bh);
+  }
+
+  // Beat flash — the whole aurora field lifts briefly on each detected hit
+  if (beatFlash > 0.06) {
+    bctx.fillStyle = _laColorAbs(hDeg, Math.min(_laSat, 0.8), 0.60, beatFlash * 0.16);
     bctx.fillRect(0, 0, bw, bh);
   }
 
@@ -2792,9 +2807,12 @@ function animate() {
     // Orbital tilt jolt — rings tip toward viewer on each beat, spring back via lerp
     orbitGroup.rotation.x += 0.10;
     _orbitSpinBoost = 1.0;
-    pendingShockwave2 = 0;
+    // Beat shockwave — the ring expands outward on every detected beat; strong
+    // hits (well above the dynamic threshold) launch a trailing second wave.
+    spawnShockwave(false);
+    pendingShockwave2 = bassLevel > beatThreshold * 1.35 ? 8 : 0;
   }
-  if (pendingShockwave2 > 0) pendingShockwave2 = 0;
+  if (pendingShockwave2 > 0 && --pendingShockwave2 === 0) spawnShockwave(true);
   prevBass    = bassLevel;
   beatFlash     *= 0.88; // slower decay → more sustained beat punch (was 0.82)
   spherePulse   *= 0.90;
@@ -2833,12 +2851,14 @@ function animate() {
 
   sphereMat.uniforms.uTime.value       = time;
   // Breathing modulates perceived audio level slightly — sphere feels more alive
-  sphereMat.uniforms.uAudioLevel.value = _sAudio * 0.70 + Math.sin(_breathePhase) * 0.028;
-  sphereMat.uniforms.uBass.value       = _sBass;
-  sphereMat.uniforms.uMid.value        = _sMid;
-  sphereMat.uniforms.uHigh.value       = _sHigh;
-  sphereMat.uniforms.uBeatFlash.value  = beatFlash * 0.82;
-  sphereMat.uniforms.uFlux.value       = fluxLevel * 0.75;
+  sphereMat.uniforms.uAudioLevel.value = _sAudio * 0.85 + Math.sin(_breathePhase) * 0.028;
+  // Shader inputs boosted ~1.3x so surface displacement / color / glow visibly ride
+  // the music (mesh proportions are untouched — sScale cap stays as-is).
+  sphereMat.uniforms.uBass.value       = Math.min(_sBass * 1.30, 1.0);
+  sphereMat.uniforms.uMid.value        = Math.min(_sMid  * 1.25, 1.0);
+  sphereMat.uniforms.uHigh.value       = Math.min(_sHigh * 1.30, 1.0);
+  sphereMat.uniforms.uBeatFlash.value  = beatFlash;
+  sphereMat.uniforms.uFlux.value       = fluxLevel * 0.95;
 
   // Mix theme — hue cycles through full spectrum, speed follows audio energy
   if (state.theme === 'mix') {
@@ -3489,6 +3509,7 @@ async function playIndex(idx) {
     if (!audio.paused && audio.currentTime > 0) {
       await fadeTo(0, 280);
     }
+    audio.crossOrigin = 'anonymous';  // re-arm viz even after a per-song CORS fallback
     audio.src = urlData;
     audio.volume = 0;
     await audio.play().catch(e => console.warn('Play error:', e));
@@ -3539,7 +3560,22 @@ audio.addEventListener('ended', () => {
   else if (state.repeat === 1) playIndex(0);
 });
 
+// If a CDN host ever rejects the CORS media request (crossorigin attr), retry
+// the same source once without it — playback beats visualization.
+let _corsRetriedSrc = '';
 audio.addEventListener('error', () => {
+  if (audio.crossOrigin && audio.src && _corsRetriedSrc !== audio.src) {
+    _corsRetriedSrc = audio.src;
+    const src = audio.src;
+    const t = audio.currentTime;
+    audio.crossOrigin = null;
+    audio.src = src;
+    audio.currentTime = t;
+    audio.play().catch(() => {});
+    showToast('该音源不支持可视化，已切换普通播放');
+    return;
+  }
+  audio.crossOrigin = 'anonymous';  // restore for the next song
   showToast('播放出错，跳至下一首');
   setTimeout(() => playIndex(state.currentIndex + 1), 1000);
 });
