@@ -2938,7 +2938,7 @@ function animate() {
   orbitGroup.rotation.z -= 0.00045 + highLevel * 0.0012 + _sBass * 0.0008;
   // Bass makes the orbit group tilt on X — rings lean and rock with low-end hits
   orbitGroup.rotation.x += (_sBass * 0.12 - orbitGroup.rotation.x) * Math.min(delta * 2.5, 0.12);
-  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055);
+  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055 + ring * 0.6);
   orbitRings.forEach((ring, i) => {
     // Inner ring (i=0) spins harder on beat — closest to sphere, most reactive
     const ringSpinBoost = i === 0 ? spherePulse * 0.010 : spherePulse * 0.004 / (i + 1);
@@ -2963,7 +2963,7 @@ function animate() {
   // ── Audio comets — slanted 3D satellites with bass-reactive trails ───────
   cometGroup.rotation.y += 0.0010 + _sMid * 0.0025 + spherePulse * 0.006;
   cometGroup.rotation.x = 0.24 + Math.sin(time * 0.20) * 0.08 + _sBass * 0.08;
-  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045);
+  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045 + ring * 0.5);
   _cometColor.copy(sphereMat.uniforms.uColor2.value);
   _cometColor.getHSL(_hslScratch);
   audioComets.forEach((comet, i) => {
@@ -2999,7 +2999,7 @@ function animate() {
   });
 
   // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
-  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.2 + fluxLevel * 1.0;
+  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 2.4 + fluxLevel * 1.0 + Math.abs(ring) * 5.0;
   sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, 0.04);
 
   // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
@@ -3037,11 +3037,12 @@ function animate() {
   haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004;
   haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
   haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
-  haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04);
+  haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.7);
   // color stays fixed muted-purple — no lerp toward theme color
 
   // ── Nebula swarm — slow drift + uScale sync for correct point-size attenuation ──
   nebulaSwarm.rotation.y += 0.00040 + _sBass * 0.0009 + beatFlash * 0.002;
+  nebulaSwarm.scale.setScalar(1.0 + _sBass * 0.03 + beatFlash * 0.05 + ring * 0.45);
   nebulaSwarm.rotation.x += Math.sin(time * 0.19) * 0.00015;
   nebulaMat.uniforms.uScale.value = renderer.domElement.height * 0.5;
 
