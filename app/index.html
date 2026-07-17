@@ -2530,6 +2530,14 @@ let _beatInterval = 0.50; // estimated seconds between beats (starts at 120 BPM)
 let _corePulsePhase = 0;
 let _orbitSpinBoost = 0;
 
+// Struck-tuning-fork ring: on each beat the radius oscillates in/out at
+// RING_FREQ Hz with exponentially decaying amplitude (first swing biggest),
+// distinct from the smooth band-level breathing.
+let _ringAmp = 0;
+let _ringPhase = 0;
+const RING_FREQ = 11;    // oscillations per second — dense enough to read as "vibration"
+const RING_DECAY = 6.5;  // per-second exponential decay — settles in ~0.5s
+
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
 let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0;
 
@@ -2806,6 +2814,9 @@ function animate() {
     // Orbital tilt jolt — rings tip toward viewer on each beat, spring back via lerp
     orbitGroup.rotation.x += 0.10;
     _orbitSpinBoost = 1.0;
+    // Strike the tuning fork: ring amplitude scales with how hard the hit is
+    _ringAmp = Math.min(0.035 + bassLevel * 0.055, 0.085);
+    _ringPhase = 0;
     // Beat shockwave — the ring expands outward on every detected beat; strong
     // hits (well above the dynamic threshold) launch a trailing second wave.
     spawnShockwave(false);
@@ -2828,11 +2839,15 @@ function animate() {
   sphere.rotation.y += 0.0015 + midLevel * 0.008 + spherePulse * 0.010;
   sphere.rotation.x += 0.0005 + midLevel * 0.003 + spherePulse * 0.004;
   sphere.rotation.z += Math.sin(time * 0.9) * 0.0002 + highLevel * 0.002;
-  // Radius follows the EQ band levels (the bars beside the album art): bass
-  // pushes out most, mid/high add a little. Uniform scale on all axes keeps
-  // the silhouette a perfect circle — this is the sphere's music response.
-  const bandRadial = _sBass * 0.065 + _sMid * 0.022 + _sHigh * 0.010;
-  const sScale = Math.min(1.0 + _breathe * 0.45 + bandRadial + beatFlash * 0.012, 1.10);
+  // Radius follows the EQ band levels 1:1 — same variables the mini bars
+  // render, so bar big = swing big, bar small = swing small. Uniform scale
+  // on all axes keeps the silhouette a perfect circle.
+  const bandRadial = bassLevel * 0.075 + midLevel * 0.025 + highLevel * 0.012;
+  // Damped ring oscillation (in AND out) layered on top — the beat "strike"
+  _ringPhase += delta * RING_FREQ * Math.PI * 2;
+  _ringAmp *= Math.exp(-RING_DECAY * delta);
+  const ring = Math.sin(_ringPhase) * _ringAmp;
+  const sScale = Math.max(0.93, Math.min(1.0 + _breathe * 0.45 + bandRadial + ring, 1.10));
   sphere.scale.set(sScale, sScale, sScale);
 
   // Per-band smoothing — brief targets: bass 0.055/frame, mid 0.04/frame, treble 0.025/frame at 60fps
