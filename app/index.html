@@ -2536,7 +2536,7 @@ let _orbitSpinBoost = 0;
 // distinct from the smooth band-level breathing.
 let _ringAmp = 0;
 let _ringPhase = 0;
-const RING_FREQ = 14;    // oscillations per second — dense enough to read as "vibration"
+const RING_FREQ = 11;    // oscillations per second — dense enough to read as "vibration"
 const RING_DECAY = 6.5;  // per-second exponential decay — settles in ~0.5s
 
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
@@ -2816,7 +2816,7 @@ function animate() {
     orbitGroup.rotation.x += 0.10;
     _orbitSpinBoost = 1.0;
     // Strike the tuning fork: ring amplitude scales with how hard the hit is
-    _ringAmp = Math.min(0.05 + bassLevel * 0.07, 0.105);
+    _ringAmp = Math.min(0.035 + bassLevel * 0.055, 0.085);
     _ringPhase = 0;
     // Shockwave rings removed per user request — the radius ring IS the beat cue.
     pendingShockwave2 = 0;
