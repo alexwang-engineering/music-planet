@@ -1506,15 +1506,16 @@ const vertexShader = `
     // Frequency topology: bass energy concentrated near poles, treble along equator
     float poleAxis = abs(normalize(position).y);
     float equAxis  = 1.0 - poleAxis;
-    // Round-silhouette rule (user request): surface noise is subtle texture only —
-    // the music drives the sphere's uniform in/out radius (JS sScale mirrors the
-    // EQ band bars), never the shape. Keep every audio term here small.
+    // Surface rule (user request): quiet music = smooth round ball; drum hits =
+    // spikes pop out with amplitude tied to the FIRST bar (bass), punched
+    // briefly harder on each detected beat. Radius breathing stays in JS sScale.
     float windSpeed = 0.16 + uAudioLevel * 0.10;
     float windAngle = uTime * 0.04;
     float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.007
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
-    float displacement = noise * (0.035 + uBass * 0.022 + uMid * 0.010)
+    float spikeAmp = uBass * 0.105 + uBeatFlash * 0.055;
+    float displacement = noise * (0.030 + spikeAmp)
                        + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
                        + windDrift + idleBreath;
 
