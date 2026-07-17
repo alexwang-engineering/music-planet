@@ -1506,18 +1506,17 @@ const vertexShader = `
     // Frequency topology: bass energy concentrated near poles, treble along equator
     float poleAxis = abs(normalize(position).y);
     float equAxis  = 1.0 - poleAxis;
-    float beatSwell = (snoise(position * 0.9 + uTime * 0.06) * 0.5 + 0.5) * uBeatFlash * 0.042;
-    // Wind drift — speed increases with audio energy for more animated surface in music
-    float windSpeed = 0.18 + uAudioLevel * 0.28 + uBass * 0.18;
-    float windAngle = uTime * 0.04 + uBass * 1.4;
-    float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.013
-                    + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.009;
-    float eqWave = equAxis * sin(position.x * 4.8 + uTime * (1.2 + uBass * 2.2)) * sin(position.z * 3.6 + uTime * (0.9 + uMid * 1.8)) * 0.012 * uMid;
-    float poleSurge = poleAxis * poleAxis * uBass * 0.055;
-    float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.035 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.025;
-    float displacement = noise * (0.09 + uBass * (0.10 + poleAxis * 0.07) + uMid * 0.05)
-                       + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.020 + equAxis * 0.025)
-                       + beatSwell + windDrift + eqWave + poleSurge + idleBreath;
+    // Round-silhouette rule (user request): surface noise is subtle texture only —
+    // the music drives the sphere's uniform in/out radius (JS sScale mirrors the
+    // EQ band bars), never the shape. Keep every audio term here small.
+    float windSpeed = 0.16 + uAudioLevel * 0.10;
+    float windAngle = uTime * 0.04;
+    float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.007
+                    + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
+    float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
+    float displacement = noise * (0.035 + uBass * 0.022 + uMid * 0.010)
+                       + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
+                       + windDrift + idleBreath;
 
     vDisplacement = displacement;
 
@@ -2829,10 +2828,12 @@ function animate() {
   sphere.rotation.y += 0.0015 + midLevel * 0.008 + spherePulse * 0.010;
   sphere.rotation.x += 0.0005 + midLevel * 0.003 + spherePulse * 0.004;
   sphere.rotation.z += Math.sin(time * 0.9) * 0.0002 + highLevel * 0.002;
-  const sScale = Math.min(1.0 + _breathe * 0.55 + _sBass * 0.085 + beatFlash * 0.015 + spherePulse * 0.02, 1.10); // cap raised to 1.10 per audit brief (was 1.06 — too static)
-  // Beat squash: compress Y, bulge X/Z — springs back as spherePulse decays
-  const _sq = spherePulse * 0.065;
-  sphere.scale.set(sScale * (1.0 + _sq * 0.6), sScale * (1.0 - _sq), sScale * (1.0 + _sq * 0.6));
+  // Radius follows the EQ band levels (the bars beside the album art): bass
+  // pushes out most, mid/high add a little. Uniform scale on all axes keeps
+  // the silhouette a perfect circle — this is the sphere's music response.
+  const bandRadial = _sBass * 0.065 + _sMid * 0.022 + _sHigh * 0.010;
+  const sScale = Math.min(1.0 + _breathe * 0.45 + bandRadial + beatFlash * 0.012, 1.10);
+  sphere.scale.set(sScale, sScale, sScale);
 
   // Per-band smoothing — brief targets: bass 0.055/frame, mid 0.04/frame, treble 0.025/frame at 60fps
   // Asymmetric: faster attack to catch beats, slow release for organic decay (no jitter)
@@ -3128,11 +3129,11 @@ function animate() {
   // Sway + beat zoom: sphere punches toward camera on each beat then springs back
   camera.position.x = Math.sin(time * 0.23) * 0.09 + Math.sin(time * 0.67) * 0.035 + _sBass * Math.sin(time * 1.8) * 0.022 + Math.sin(time * 47.3) * _beatShake * 0.018;
   camera.position.y = 1.2 + Math.cos(time * 0.29) * 0.055 + _sBass * 0.028 + Math.cos(time * 38.9) * _beatShake * 0.012;
-  camera.position.z = 4.2 - spherePulse * 0.28 - _sBass * 0.08;
+  camera.position.z = 4.2 - spherePulse * 0.10 - _sBass * 0.03;
   // Subtle bass-reactive lookAt — camera tilts very slightly toward sphere on heavy bass
   camera.lookAt(Math.sin(time * 0.17) * 0.03, -0.40 + _sBass * 0.06, -1.5);
   // Cinematic beat punch: briefly zoom in on beat, springs back as spherePulse decays
-  const _targetFov = 45.0 - spherePulse * 2.8 - _sBass * 0.8;
+  const _targetFov = 45.0 - spherePulse * 1.0 - _sBass * 0.3;
   camera.fov += (_targetFov - camera.fov) * 0.12;
   camera.updateProjectionMatrix();
 
