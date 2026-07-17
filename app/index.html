@@ -2453,6 +2453,13 @@ let prevDataArray = null;
 // Rolling 90-frame bass history for dynamic beat threshold (~1.5s at 60fps)
 const bassHistory = new Float32Array(90);
 let bassHistIdx = 0;
+// Bass-band spectral flux — the kick-attack signal. Absolute bass level fails
+// on sustained-808 tracks (rap: level never dips → threshold chases it and no
+// beat ever fires); flux spikes on every new attack regardless of level.
+let bassFluxLevel = 0;
+const bassFluxHistory = new Float32Array(43);   // ~0.7s local window
+let bassFluxIdx = 0;
+let _prevBassFlux = 0;
 
 function updateAudio() {
   if (!analyser) return;
@@ -2480,13 +2487,18 @@ function updateAudio() {
 
   // Spectral flux = sum of positive spectral changes vs previous frame (onset detector)
   let fluxSum = 0;
+  let bassFluxSum = 0;
   if (prevDataArray) {
     for (let i = 0; i < binCount; i++) {
       const d = dataArray[i] - prevDataArray[i];
-      if (d > 0) fluxSum += d;
+      if (d > 0) {
+        fluxSum += d;
+        if (i < bassBins) bassFluxSum += d;
+      }
     }
   }
   const rawFlux = Math.min(fluxSum / (binCount * 60), 1.0);
+  const rawBassFlux = Math.min(bassFluxSum / (bassBins * 48), 1.0);
 
   const atk = 0.68, rel = 0.08;
   bassLevel       = rawBass       > bassLevel       ? bassLevel       + (rawBass       - bassLevel)       * atk : bassLevel       + (rawBass       - bassLevel)       * rel;
@@ -2499,6 +2511,13 @@ function updateAudio() {
   // Update rolling bass history for dynamic beat threshold
   bassHistory[bassHistIdx] = bassLevel;
   bassHistIdx = (bassHistIdx + 1) % bassHistory.length;
+
+  // Fast-attack bass flux + rolling local window for the adaptive threshold
+  bassFluxLevel = rawBassFlux > bassFluxLevel
+    ? bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.85
+    : bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.25;
+  bassFluxHistory[bassFluxIdx] = bassFluxLevel;
+  bassFluxIdx = (bassFluxIdx + 1) % bassFluxHistory.length;
 
   // Save this frame's spectrum for next-frame flux
   if (!prevDataArray) prevDataArray = new Uint8Array(binCount);
@@ -2789,19 +2808,24 @@ function animate() {
 
   updateAudio();
 
-  // ── Beat onset detection (dynamic threshold) ─────────────────────
+  // ── Beat onset detection: bass-band spectral flux + adaptive threshold ──
+  // Standard visualizer technique (flux = positive spectral change = attack
+  // transients). Unlike absolute bass level, this fires on every kick even in
+  // sustained-808 rap where the level never dips below its own average.
   if (beatCooldown > 0) beatCooldown--;
-  // Dynamic threshold: average window shrinks with faster tempos for tighter beat tracking
-  const _dynWin = Math.max(12, Math.min(60, Math.round(_beatInterval * 60 * 0.55)));
-  let bassAvg = 0;
-  for (let i = 0; i < _dynWin; i++) bassAvg += bassHistory[(bassHistIdx - 1 - i + bassHistory.length) % bassHistory.length];
-  bassAvg /= _dynWin;
-  const beatThreshold = Math.max(0.17, bassAvg * 1.18);
-  const onBeat = bassLevel > beatThreshold && bassLevel > prevBass + 0.025 && beatCooldown === 0;
+  let _fluxMean = 0;
+  for (let i = 0; i < bassFluxHistory.length; i++) _fluxMean += bassFluxHistory[i];
+  _fluxMean /= bassFluxHistory.length;
+  const fluxThreshold = Math.max(_fluxMean * 1.45, 0.045);
+  const onBeat = bassFluxLevel > fluxThreshold && bassFluxLevel > _prevBassFlux * 1.05 && beatCooldown === 0;
+  // Hit strength 0..1.6 — how far this attack rises above the local average
+  const beatStrength = onBeat
+    ? Math.min(0.5 + (bassFluxLevel - fluxThreshold) / (fluxThreshold + 0.02), 1.6)
+    : 0;
   if (onBeat) {
-    beatFlash     = 0.5;
-    spherePulse   = 0.35;
-    _beatShake    = 0.85;
+    beatFlash     = Math.min(0.34 + beatStrength * 0.30, 0.82);
+    spherePulse   = 0.22 + beatStrength * 0.16;
+    _beatShake    = 0.5 + beatStrength * 0.45;
     _beatHueBurst = 0.3;
     // Adaptive cooldown — tracks actual beat interval so fast songs stay locked
     if (_lastBeatTime > 0) {
@@ -2815,14 +2839,15 @@ function animate() {
     // Orbital tilt jolt — rings tip toward viewer on each beat, spring back via lerp
     orbitGroup.rotation.x += 0.10;
     _orbitSpinBoost = 1.0;
-    // Strike the tuning fork: ring amplitude scales with how hard the hit is
-    _ringAmp = Math.min(0.08 + bassLevel * 0.11, 0.17);  // 暴力: first swing hits hard
+    // Strike the tuning fork: ring amplitude scales with hit strength
+    _ringAmp = Math.min(0.06 + beatStrength * 0.075, 0.17);
     _ringPhase = 0;
     // Shockwave rings removed per user request — the radius ring IS the beat cue.
     pendingShockwave2 = 0;
   }
   if (pendingShockwave2 > 0) pendingShockwave2 = 0;
   prevBass    = bassLevel;
+  _prevBassFlux = bassFluxLevel;
   beatFlash     *= 0.88; // slower decay → more sustained beat punch (was 0.82)
   spherePulse   *= 0.90;
   _beatShake    *= 0.75;
