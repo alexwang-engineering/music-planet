@@ -777,6 +777,59 @@
     filter: drop-shadow(0 0 5px var(--accent, rgba(122,44,255,0.55)));
   }
 
+  /* === VIZ TUNER PANEL === */
+  #btn-tuner {
+    width: 28px; height: 28px; opacity: 0.55;
+    transition: opacity 0.2s, color 0.2s;
+  }
+  #btn-tuner:hover { opacity: 0.85; }
+  #btn-tuner.active { opacity: 1; color: var(--accent); }
+  #tuner-panel {
+    position: fixed;
+    right: 90px;
+    bottom: calc(var(--bar-h) + 18px);
+    width: 264px;
+    padding: 14px 16px 12px;
+    background: rgba(5,1,10,0.95);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    z-index: 70;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    display: grid;
+    gap: 9px;
+  }
+  #tuner-panel.hidden { display: none; }
+  .tuner-title {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+    color: rgba(255,255,255,0.55); text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  #tuner-reset {
+    background: none; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; color: rgba(255,255,255,0.5);
+    font-size: 10px; padding: 3px 8px; cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  #tuner-reset:hover { color: var(--accent2); border-color: var(--accent); }
+  .tuner-row { display: grid; grid-template-columns: 74px 1fr 38px; align-items: center; gap: 8px; }
+  .tuner-row label { font-size: 11px; color: rgba(255,255,255,0.62); white-space: nowrap; }
+  .tuner-row output { font-size: 10px; color: var(--accent2); text-align: right; font-variant-numeric: tabular-nums; }
+  .tuner-row input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 3px;
+    background: rgba(255,255,255,0.14); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  .tuner-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--accent2, #b070ff); cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+
   #visual-panel {
     position: fixed;
     right: 118px;
@@ -1317,6 +1370,9 @@
       <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
       <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
     </div>
+    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/></svg>
+    </button>
     <button class="ctrl-btn" id="btn-visual" title="视觉模式">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
     </button>
@@ -1344,6 +1400,14 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
     <span>流光</span>
   </button>
+</div>
+
+<!-- VIZ TUNER PANEL (rows are built by buildTunerPanel()) -->
+<div id="tuner-panel" class="hidden">
+  <div class="tuner-title">
+    <span>节奏调节器</span>
+    <button id="tuner-reset">恢复默认</button>
+  </div>
 </div>
 
 <!-- PLAY QUEUE PANEL -->
@@ -1434,6 +1498,7 @@ const vertexShader = `
   uniform float uMid;
   uniform float uHigh;
   uniform float uBeatFlash;
+  uniform float uSpikeMul;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -1514,7 +1579,7 @@ const vertexShader = `
     float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.007
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
-    float spikeAmp = uBass * 0.085 + uBeatFlash * 0.075;
+    float spikeAmp = (uBass * 0.085 + uBeatFlash * 0.075) * uSpikeMul;
     float displacement = noise * (0.030 + spikeAmp)
                        + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
                        + windDrift + idleBreath;
@@ -1779,6 +1844,7 @@ const sphereMat = new THREE.ShaderMaterial({
     uColor2:     { value: new THREE.Color(0x7A2CFF) },
     uBeatFlash:  { value: 0 },
     uFlux:       { value: 0 },
+    uSpikeMul:   { value: 1 },
   },
   wireframe: true,
   transparent: true,
@@ -2555,8 +2621,26 @@ let _orbitSpinBoost = 0;
 // distinct from the smooth band-level breathing.
 let _ringAmp = 0;
 let _ringPhase = 0;
-const RING_FREQ = 11;    // oscillations per second — dense enough to read as "vibration"
-const RING_DECAY = 5.5;  // per-second exponential decay — rings a beat longer
+// ── User-tunable visualization parameters (节奏调节器) ────────────────
+// All strike/coupling coefficients are multiplied by these; persisted so the
+// user's taste survives restarts. 1 = the shipped default feel.
+const VIZ_DEFAULTS = {
+  beat:      1,    // 打击强度 — flash/pulse/shake per hit
+  ring:      1,    // 震颤幅度 — radius oscillation amplitude
+  ringFreq:  11,   // 震颤频率 Hz
+  ringDecay: 5.5,  // 震颤衰减 /s (bigger = stops sooner)
+  spike:     1,    // 尖刺幅度 — surface spikes
+  radius:    1,    // 呼吸幅度 — band-level radius follow
+  sens:      1,    // 鼓点灵敏度 — higher = more beats detected
+  camera:    1,    // 镜头晃动
+  scene:     1,    // 环境联动 — rings/comets/nebula/halo strike coupling
+};
+const VIZ = Object.assign({}, VIZ_DEFAULTS, (() => {
+  try { return JSON.parse(localStorage.getItem('mp_viz') || '{}'); } catch { return {}; }
+})());
+function saveViz() {
+  try { localStorage.setItem('mp_viz', JSON.stringify(VIZ)); } catch (_) {}
+}
 
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
 let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0;
@@ -2816,16 +2900,16 @@ function animate() {
   let _fluxMean = 0;
   for (let i = 0; i < bassFluxHistory.length; i++) _fluxMean += bassFluxHistory[i];
   _fluxMean /= bassFluxHistory.length;
-  const fluxThreshold = Math.max(_fluxMean * 1.45, 0.045);
+  const fluxThreshold = Math.max(_fluxMean * 1.45, 0.045) / Math.max(VIZ.sens, 0.25);
   const onBeat = bassFluxLevel > fluxThreshold && bassFluxLevel > _prevBassFlux * 1.05 && beatCooldown === 0;
   // Hit strength 0..1.6 — how far this attack rises above the local average
   const beatStrength = onBeat
     ? Math.min(0.5 + (bassFluxLevel - fluxThreshold) / (fluxThreshold + 0.02), 1.6)
     : 0;
   if (onBeat) {
-    beatFlash     = Math.min(0.26 + beatStrength * 0.20, 0.58);
-    spherePulse   = 0.15 + beatStrength * 0.10;
-    _beatShake    = 0.28 + beatStrength * 0.22;
+    beatFlash     = Math.min((0.26 + beatStrength * 0.20) * VIZ.beat, 0.85);
+    spherePulse   = (0.15 + beatStrength * 0.10) * VIZ.beat;
+    _beatShake    = (0.28 + beatStrength * 0.22) * VIZ.camera;
     _beatHueBurst = 0.3;
     // Adaptive cooldown — tracks actual beat interval so fast songs stay locked
     if (_lastBeatTime > 0) {
@@ -2840,7 +2924,7 @@ function animate() {
     orbitGroup.rotation.x += 0.10;
     _orbitSpinBoost = 1.0;
     // Strike the tuning fork: ring amplitude scales with hit strength
-    _ringAmp = Math.min(0.04 + beatStrength * 0.045, 0.10);
+    _ringAmp = Math.min((0.04 + beatStrength * 0.045) * VIZ.ring, 0.20);
     _ringPhase = 0;
     // Shockwave rings removed per user request — the radius ring IS the beat cue.
     pendingShockwave2 = 0;
@@ -2866,10 +2950,10 @@ function animate() {
   // Radius follows the EQ band levels 1:1 — same variables the mini bars
   // render, so bar big = swing big, bar small = swing small. Uniform scale
   // on all axes keeps the silhouette a perfect circle.
-  const bandRadial = bassLevel * 0.075 + midLevel * 0.025 + highLevel * 0.012;
+  const bandRadial = (bassLevel * 0.075 + midLevel * 0.025 + highLevel * 0.012) * VIZ.radius;
   // Damped ring oscillation (in AND out) layered on top — the beat "strike"
-  _ringPhase += delta * RING_FREQ * Math.PI * 2;
-  _ringAmp *= Math.exp(-RING_DECAY * delta);
+  _ringPhase += delta * VIZ.ringFreq * Math.PI * 2;
+  _ringAmp *= Math.exp(-VIZ.ringDecay * delta);
   const ring = Math.sin(_ringPhase) * _ringAmp;
   const sScale = Math.max(0.91, Math.min(1.0 + _breathe * 0.45 + bandRadial + ring, 1.12));
   sphere.scale.set(sScale, sScale, sScale);
@@ -2899,6 +2983,7 @@ function animate() {
   sphereMat.uniforms.uHigh.value       = Math.min(_sHigh * 1.30, 1.0);
   sphereMat.uniforms.uBeatFlash.value  = beatFlash;
   sphereMat.uniforms.uFlux.value       = fluxLevel * 0.95;
+  sphereMat.uniforms.uSpikeMul.value   = VIZ.spike;
 
   // Mix theme — hue cycles through full spectrum, speed follows audio energy
   if (state.theme === 'mix') {
@@ -2963,7 +3048,7 @@ function animate() {
   orbitGroup.rotation.z -= 0.00045 + highLevel * 0.0012 + _sBass * 0.0008;
   // Bass makes the orbit group tilt on X — rings lean and rock with low-end hits
   orbitGroup.rotation.x += (_sBass * 0.12 - orbitGroup.rotation.x) * Math.min(delta * 2.5, 0.12);
-  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055 + ring * 0.35);
+  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055 + ring * 0.35 * VIZ.scene);
   orbitRings.forEach((ring, i) => {
     // Inner ring (i=0) spins harder on beat — closest to sphere, most reactive
     const ringSpinBoost = i === 0 ? spherePulse * 0.010 : spherePulse * 0.004 / (i + 1);
@@ -2988,7 +3073,7 @@ function animate() {
   // ── Audio comets — slanted 3D satellites with bass-reactive trails ───────
   cometGroup.rotation.y += 0.0010 + _sMid * 0.0025 + spherePulse * 0.006;
   cometGroup.rotation.x = 0.24 + Math.sin(time * 0.20) * 0.08 + _sBass * 0.08;
-  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045 + ring * 0.3);
+  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045 + ring * 0.3 * VIZ.scene);
   _cometColor.copy(sphereMat.uniforms.uColor2.value);
   _cometColor.getHSL(_hslScratch);
   audioComets.forEach((comet, i) => {
@@ -3024,7 +3109,7 @@ function animate() {
   });
 
   // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
-  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5;
+  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene;
   sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, 0.04);
 
   // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
@@ -3062,12 +3147,12 @@ function animate() {
   haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004;
   haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
   haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
-  haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.4);
+  haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.4 * VIZ.scene);
   // color stays fixed muted-purple — no lerp toward theme color
 
   // ── Nebula swarm — slow drift + uScale sync for correct point-size attenuation ──
   nebulaSwarm.rotation.y += 0.00040 + _sBass * 0.0009 + beatFlash * 0.002;
-  nebulaSwarm.scale.setScalar(1.0 + _sBass * 0.03 + beatFlash * 0.05 + ring * 0.25);
+  nebulaSwarm.scale.setScalar(1.0 + _sBass * 0.03 + beatFlash * 0.05 + ring * 0.25 * VIZ.scene);
   nebulaSwarm.rotation.x += Math.sin(time * 0.19) * 0.00015;
   nebulaMat.uniforms.uScale.value = renderer.domElement.height * 0.5;
 
@@ -3169,7 +3254,7 @@ function animate() {
   // Sway + beat zoom: sphere punches toward camera on each beat then springs back
   camera.position.x = Math.sin(time * 0.23) * 0.09 + Math.sin(time * 0.67) * 0.035 + _sBass * Math.sin(time * 1.8) * 0.022 + Math.sin(time * 47.3) * _beatShake * 0.018;
   camera.position.y = 1.2 + Math.cos(time * 0.29) * 0.055 + _sBass * 0.028 + Math.cos(time * 38.9) * _beatShake * 0.012;
-  camera.position.z = 4.2 - spherePulse * 0.12 - _sBass * 0.04;
+  camera.position.z = 4.2 - (spherePulse * 0.12 + _sBass * 0.04) * VIZ.camera;
   // Subtle bass-reactive lookAt — camera tilts very slightly toward sphere on heavy bass
   camera.lookAt(Math.sin(time * 0.17) * 0.03, -0.40 + _sBass * 0.06, -1.5);
   // Cinematic beat punch: briefly zoom in on beat, springs back as spherePulse decays
@@ -3820,6 +3905,64 @@ function applyVisualMode(mode, silent = false) {
 document.getElementById('btn-visual')?.addEventListener('click', (e) => {
   e.stopPropagation();
   document.getElementById('visual-panel')?.classList.toggle('hidden');
+});
+
+// ── 节奏调节器 panel ─────────────────────────────────────────────
+const TUNER_ROWS = [
+  { key: 'beat',      label: '打击强度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'ring',      label: '震颤幅度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'ringFreq',  label: '震颤频率', min: 6,   max: 18, step: 1,    fmt: v => v + 'Hz' },
+  { key: 'ringDecay', label: '震颤衰减', min: 3,   max: 10, step: 0.5,  fmt: v => v.toFixed(1) },
+  { key: 'spike',     label: '尖刺幅度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'radius',    label: '呼吸幅度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'sens',      label: '鼓点灵敏', min: 0.5, max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'camera',    label: '镜头晃动', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+  { key: 'scene',     label: '环境联动', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+];
+
+function buildTunerPanel() {
+  const panel = document.getElementById('tuner-panel');
+  panel.querySelectorAll('.tuner-row').forEach(el => el.remove());
+  TUNER_ROWS.forEach(row => {
+    const div = document.createElement('div');
+    div.className = 'tuner-row';
+    const val = VIZ[row.key];
+    div.innerHTML = `<label>${row.label}</label>
+      <input type="range" min="${row.min}" max="${row.max}" step="${row.step}" value="${val}">
+      <output>${row.fmt(val)}</output>`;
+    const input = div.querySelector('input');
+    const out = div.querySelector('output');
+    input.addEventListener('input', () => {
+      VIZ[row.key] = parseFloat(input.value);
+      out.textContent = row.fmt(VIZ[row.key]);
+      saveViz();
+    });
+    panel.appendChild(div);
+  });
+}
+buildTunerPanel();
+
+document.getElementById('tuner-reset').addEventListener('click', () => {
+  Object.assign(VIZ, VIZ_DEFAULTS);
+  saveViz();
+  buildTunerPanel();
+  showToast('调节器已恢复默认');
+});
+
+document.getElementById('btn-tuner').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('tuner-panel');
+  panel.classList.toggle('hidden');
+  document.getElementById('btn-tuner').classList.toggle('active', !panel.classList.contains('hidden'));
+});
+
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('tuner-panel');
+  const btn = document.getElementById('btn-tuner');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (panel.contains(e.target) || btn?.contains(e.target)) return;
+  panel.classList.add('hidden');
+  btn?.classList.remove('active');
 });
 
 document.querySelectorAll('.visual-option').forEach(btn => {
