@@ -3344,7 +3344,7 @@ function applyAccentColor(cssColor, threeColor) {
 // ===================================================================
 // API LAYER
 // ===================================================================
-const API = 'http://localhost:3000';
+const API = 'http://127.0.0.1:3000';
 
 // Login session cookie — captured from QR check body and persisted in localStorage.
 // Passed explicitly as ?cookie= on every request so the API server forwards MUSIC_U to NetEase.
@@ -3370,7 +3370,9 @@ async function api(path) {
     ? `${sep}cookie=${encodeURIComponent(sessionCookie)}`
     : '';
   const res = await fetch(API + path + cookieParam, {
-    credentials: 'include',
+    // Login state is forwarded explicitly in cookieParam. Avoid ambient cookies so
+    // the local API can keep a strict, predictable cross-origin boundary.
+    credentials: 'omit',
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -4582,7 +4584,7 @@ document.getElementById('back-to-playlists').addEventListener('click', () => {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       await fetch(API + '/search?keywords=test&limit=1', {
-        credentials: 'include',
+        credentials: 'omit',
         signal: AbortSignal.timeout(3000),
       });
       const status = await api(`/login/status?timestamp=${Date.now()}`);

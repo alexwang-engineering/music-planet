@@ -27,7 +27,12 @@ function startApiServer() {
     : path.join(__dirname, 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
 
   apiProcess = spawn(process.execPath, [apiEntry], {
-    env: { ...process.env, PORT: String(API_PORT), ELECTRON_RUN_AS_NODE: '1' },
+    env: {
+      ...process.env,
+      PORT: String(API_PORT),
+      HOST: '127.0.0.1',
+      ELECTRON_RUN_AS_NODE: '1',
+    },
     stdio: 'pipe',
   })
 
@@ -46,7 +51,7 @@ function startApiServer() {
 function waitForApi(retries = 40, delay = 400) {
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      http.get(`http://localhost:${API_PORT}/search?keywords=test&limit=1`, res => {
+      http.get(`http://127.0.0.1:${API_PORT}/search?keywords=test&limit=1`, res => {
         res.resume()
         resolve()
       }).on('error', () => {
@@ -75,8 +80,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,           // allow file:// → localhost:3000 fetch
-      allowRunningInsecureContent: true,
+      webSecurity: true,
     },
   })
 

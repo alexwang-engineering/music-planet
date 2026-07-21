@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "predist": "rm -rf api-staging && mkdir -p api-staging && cd api-staging && npm init -y > /dev/null 2>&1 && npm i --omit=dev --no-audit --no-fund NeteaseCloudMusicApi@^4.28.0",
+    "predist": "rm -rf api-staging && mkdir -p api-staging && cd api-staging && npm init -y > /dev/null 2>&1 && npm pkg set overrides.music-metadata=11.14.0 && npm i --omit=dev --no-audit --no-fund NeteaseCloudMusicApi@4.32.0",
     "dist": "electron-builder --mac --dir"
   },
   "build": {
@@ -41,10 +41,13 @@
     ]
   },
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.0.0"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "NeteaseCloudMusicApi": "^4.28.0"
+    "NeteaseCloudMusicApi": "^4.32.0"
+  },
+  "overrides": {
+    "music-metadata": "11.14.0"
   }
 }
