@@ -3,6 +3,7 @@
   "productName": "Nebula",
   "version": "1.0.0",
   "description": "3D NetEase Cloud Music Player",
+  "license": "Apache-2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
