@@ -1,5 +1,6 @@
 # Nebula (星云)
 
+![Status: Work in Progress](https://img.shields.io/badge/status-work_in_progress-yellow.svg)
 [![CI](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml/badge.svg)](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -74,3 +75,16 @@ node --check main.js
 
 GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs these installation,
 high-severity dependency-audit and syntax checks on every push and pull request.
+
+## Dependencies
+
+The unofficial [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)
+is pinned to `4.32.0` and staged at build time rather than listed as a runtime
+dependency, so the bundled API is reproducible and does not shift when upstream
+publishes a breaking change. The `predist` step also forces a
+`music-metadata@11.14.0` override to resolve a transitive version conflict during
+that staging install.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
