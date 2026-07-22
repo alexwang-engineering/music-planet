@@ -1,5 +1,8 @@
 # Nebula (星云)
 
+[![CI](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml/badge.svg)](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 > 🚧 **Work in progress** — under active development, not feature-complete. Feedback and review welcome via the open draft PR.
 
 A personal-use Electron desktop app that wraps NetEase Cloud Music (网易云音乐)
@@ -34,7 +37,25 @@ npm start
 npm run dist
 ```
 
-Packages the app with `electron-builder` (`--mac --dir` target) and bundles the NetEase API package into `extraResources`.
+This runs two steps:
+
+1. `predist` stages a minimal, production-only copy of
+   [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) into
+   `api-staging/`, which `electron-builder` bundles into the app's
+   `extraResources` as `api-runtime`.
+2. `electron-builder --mac --dir` packages an **unpacked** `.app` (no installer)
+   for both Apple silicon and Intel.
+
+The built app appears under `dist/`:
+
+```bash
+open "dist/mac-arm64/Nebula.app"   # Apple silicon
+open "dist/mac/Nebula.app"         # Intel
+```
+
+On first launch the app spawns the bundled NetEase API on `127.0.0.1:3000`,
+waits for it to become ready, then opens the player window — no separate server
+step is needed for the packaged build.
 
 ## Notes for reviewers
 
@@ -51,5 +72,5 @@ npm audit --audit-level=high
 node --check main.js
 ```
 
-GitHub Actions runs these installation and syntax checks on every push and pull
-request.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs these installation,
+high-severity dependency-audit and syntax checks on every push and pull request.
