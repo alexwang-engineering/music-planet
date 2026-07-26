@@ -209,6 +209,47 @@
   .body-playing .song-item.active .eq-icon { display:flex; }
   .body-playing .song-item.active .song-dur { display:none; }
 
+  /* Keyboard focus ring for song rows (a11y) */
+  .song-item:focus-visible {
+    outline: none;
+    background: rgba(255,255,255,0.09);
+    box-shadow: inset 0 0 0 1.5px var(--accent-glow, rgba(122,44,255,0.55));
+  }
+
+  /* Songs that can't be played without VIP — dimmed, still clickable in case
+     the logged-in account has access. */
+  .song-item.unplayable { opacity: 0.42; }
+  .song-item.unplayable:hover { opacity: 0.6; }
+
+  /* Right-click context menu for song rows */
+  #ctx-menu {
+    position: fixed;
+    z-index: 200;
+    min-width: 148px;
+    padding: 5px;
+    border-radius: 11px;
+    background: rgba(20,18,32,0.86);
+    backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    animation: ctxIn 0.12s ease-out;
+  }
+  @keyframes ctxIn { from { opacity:0; transform: scale(0.96) translateY(-3px); } to { opacity:1; transform:none; } }
+  #ctx-menu.hidden { display:none; }
+  .ctx-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.82);
+    border-radius: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ctx-item:hover { background: var(--accent); color: #fff; }
+  .ctx-item svg { flex-shrink:0; opacity:0.85; }
+  .ctx-sep { height:1px; margin:4px 6px; background:rgba(255,255,255,0.08); }
+
   .song-thumb {
     width: 38px;
     height: 38px;
@@ -1420,6 +1461,18 @@
 </div>
 
 <div id="toast"></div>
+
+<!-- Right-click menu for song rows -->
+<div id="ctx-menu" class="hidden">
+  <div class="ctx-item" data-act="playnext">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+    下一首播放
+  </div>
+  <div class="ctx-item" data-act="addqueue">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    加入队列
+  </div>
+</div>
 
 <!-- QR LOGIN MODAL -->
 <div id="qr-modal" class="hidden">
@@ -3478,7 +3531,7 @@ function renderLyrics(lyrics, transMap = new Map()) {
 // ===================================================================
 // PLAYLIST RENDER
 // ===================================================================
-function renderPlaylist(songs) {
+function renderPlaylist(songs, labelText = '搜索结果') {
   const wrap = document.getElementById('playlist-wrap');
   if (!songs.length) {
     wrap.innerHTML = '<div id="status-msg">没有找到结果</div>';
@@ -3489,7 +3542,7 @@ function renderPlaylist(songs) {
   // Section label
   const label = document.createElement('div');
   label.className = 'section-label';
-  label.textContent = '搜索结果';
+  label.textContent = labelText;
   wrap.appendChild(label);
 
   songs.forEach((song, i) => {
@@ -3517,7 +3570,10 @@ function renderPlaylist(songs) {
     }
 
     const fee = song.fee ?? 0;
-    const vipBadge = (fee > 0 && !sessionCookie) ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    const unplayable = fee > 0 && !sessionCookie;
+    const vipBadge = unplayable ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    if (unplayable) div.classList.add('unplayable');
+    div.dataset.songId = song.id;
     div.innerHTML = `
       ${thumbHtml}
       <div class="song-info">
@@ -3527,23 +3583,122 @@ function renderPlaylist(songs) {
       <div class="eq-icon"><span></span><span></span><span></span></div>
       ${dur ? `<div class="song-dur">${dur}</div>` : ''}
     `;
-    div.addEventListener('click', () => playIndex(i));
+    bindSongItem(div, song, () => playFromBrowse(songs, i));
     wrap.appendChild(div);
   });
 }
 
 function updatePlaylistActive(idx) {
-  document.querySelectorAll('.song-item').forEach((el, i) => {
-    el.classList.toggle('active', i === idx);
+  // Match by song id, not list position — the browse view may now differ
+  // from the play queue, so the highlighted row is "the song that's playing
+  // if it happens to be visible", regardless of order.
+  const curId = state.playlist[idx]?.id;
+  document.querySelectorAll('.song-item').forEach((el) => {
+    el.classList.toggle('active', curId != null && String(el.dataset.songId) === String(curId));
   });
 }
+
+// ===================================================================
+// BROWSE LIST vs PLAY QUEUE
+// ---------------------------------------------------------------
+// A browse view (search results, a playlist's tracks, recommendations…)
+// is a read-only *source*. The real play queue is `state.playlist`.
+// Browsing NEVER mutates the queue — only an explicit play / enqueue
+// action does. That's what keeps a search from blowing away the queue
+// you're listening to. Each song row captures its own source array, so
+// clicking is always correct even when several views coexist in the DOM.
+// ===================================================================
+
+// Play a song from a browse view: the whole view becomes the new queue,
+// then we start at the clicked index (matches how clicking a track in any
+// player plays through that list).
+function playFromBrowse(songsArray, idx) {
+  state.playlist = songsArray.slice();
+  state.currentIndex = -1;
+  playIndex(idx);
+}
+
+// Insert a single song right after the currently-playing one, without
+// disturbing playback. If the queue is empty, it just starts playing.
+function enqueueNext(song) {
+  if (!state.playlist.length || state.currentIndex < 0) {
+    state.playlist = [song];
+    state.currentIndex = -1;
+    playIndex(0);
+    return;
+  }
+  state.playlist.splice(state.currentIndex + 1, 0, song);
+  saveResume();
+  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
+  showToast(`已设为下一首：${song.name || ''}`);
+}
+
+// Append a song to the end of the queue (or start playing if empty).
+function enqueueEnd(song) {
+  if (!state.playlist.length || state.currentIndex < 0) {
+    state.playlist = [song];
+    state.currentIndex = -1;
+    playIndex(0);
+    return;
+  }
+  state.playlist.push(song);
+  saveResume();
+  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
+  showToast(`已加入队列：${song.name || ''}`);
+}
+
+// Wire click + keyboard (Enter/Space) + right-click menu onto a song row.
+// `song` is the song object; `onPlay` runs on activation.
+function bindSongItem(el, song, onPlay) {
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.addEventListener('click', onPlay);
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopPropagation();   // don't let Space also hit the global play/pause shortcut
+      onPlay();
+    }
+  });
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, song);
+  });
+}
+
+// ---- Right-click context menu ----
+let _ctxSong = null;
+function showContextMenu(x, y, song) {
+  _ctxSong = song;
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.remove('hidden');
+  // Clamp to viewport so it never opens off-screen.
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+}
+function hideContextMenu() {
+  document.getElementById('ctx-menu').classList.add('hidden');
+  _ctxSong = null;
+}
+document.getElementById('ctx-menu').addEventListener('click', (e) => {
+  const item = e.target.closest('.ctx-item');
+  if (!item || !_ctxSong) return;
+  const song = _ctxSong;
+  if (item.dataset.act === 'playnext') enqueueNext(song);
+  else if (item.dataset.act === 'addqueue') enqueueEnd(song);
+  hideContextMenu();
+});
+window.addEventListener('click', () => hideContextMenu());
+window.addEventListener('blur', () => hideContextMenu());
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); });
 
 // ===================================================================
 // PLAY SONG
 // ===================================================================
 let loading = false;
 
-async function playIndex(idx) {
+async function playIndex(idx, _skipCount = 0) {
   if (loading) return;
   if (idx < 0 || idx >= state.playlist.length) return;
 
@@ -3575,11 +3730,16 @@ async function playIndex(idx) {
     ]);
 
     if (!urlData) {
-      showToast(`"${song.name}" 无版权/需VIP，已跳过`);
       document.querySelector('.bar-song-info').classList.remove('fade-out');
       loading = false;
+      // Stop cascading if we've skipped several unplayable songs in a row.
+      if (_skipCount >= 4) {
+        showToast('连续多首无法播放，已停止');
+        return;
+      }
+      showToast(`"${song.name}" 无版权/需VIP，已跳过`);
       const next = idx + 1;
-      if (next < state.playlist.length) playIndex(next);
+      if (next < state.playlist.length) playIndex(next, _skipCount + 1);
       return;
     }
 
@@ -4333,9 +4493,10 @@ async function performSearch(q) {
   wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
 
   try {
+    // Searching only updates the browse list (via renderPlaylist) — it does
+    // NOT touch the play queue. The queue only changes when you actually
+    // play or enqueue a song.
     const songs = await searchSongs(q);
-    state.playlist = songs;
-    state.currentIndex = -1;
     renderPlaylist(songs);
     if (!songs.length) {
       wrap.innerHTML = `<div id="empty-state"><span style="color:rgba(255,255,255,0.35);font-size:13px">没有找到 "${escHtml(q)}"</span></div>`;
@@ -4343,9 +4504,11 @@ async function performSearch(q) {
   } catch (err) {
     console.error(err);
     if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
+      // The API is bundled and auto-started by the app, so this means it
+      // hasn't finished coming up (or crashed) — a wait/retry, not a
+      // "please install" situation.
       wrap.innerHTML = `<div id="status-msg">
-        请先启动 NetEase Cloud Music API 服务<br>
-        <span style="font-size:12px;color:var(--text-muted)">端口 3000 · <a href="https://github.com/Binaryify/NeteaseCloudMusicApi" target="_blank">安装说明</a></span>
+        音乐服务正在启动，请稍候重试…
       </div>`;
     } else {
       wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
@@ -4397,10 +4560,9 @@ function addToHistory(song) {
 function renderHistory() {
   const wrap = document.getElementById('playlist-wrap');
   if (!playHistory.length) {
-    wrap.innerHTML = `<div id="empty-state">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
-      <span>搜索你喜欢的音乐</span>
-    </div>`;
+    // Cold start: nothing played yet → surface recommendations so the very
+    // first open always has something to play instead of a blank panel.
+    renderRecommendations();
     return;
   }
   wrap.innerHTML = `<div class="history-header">最近播放</div>` +
@@ -4409,7 +4571,7 @@ function renderHistory() {
       const artUrl = s.al?.picUrl ? s.al.picUrl + '?param=60y60' : '';
       const dur = formatTime((s.dt || 0) / 1000);
       const fee = (s.fee === 1 || s.fee === 4) ? '<span class="vip-badge">VIP</span>' : '';
-      return `<div class="song-item" data-hist-idx="${i}" role="button" tabindex="0">
+      return `<div class="song-item" data-hist-idx="${i}" data-song-id="${s.id}">
         ${artUrl
           ? `<img class="song-thumb" src="${escHtml(artUrl)}" alt="" loading="lazy">`
           : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`}
@@ -4422,13 +4584,68 @@ function renderHistory() {
       </div>`;
     }).join('');
   wrap.querySelectorAll('.song-item[data-hist-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      // Queue becomes the whole history list so next/prev keep working.
-      const idx = parseInt(el.dataset.histIdx);
-      state.playlist = playHistory.slice();
-      state.currentIndex = -1;
-      playIndex(idx);
-    });
+    // Playing from history makes the whole history list the queue.
+    const idx = parseInt(el.dataset.histIdx);
+    bindSongItem(el, playHistory[idx], () => playFromBrowse(playHistory, idx));
+  });
+}
+
+// ===================================================================
+// COLD-START RECOMMENDATIONS
+// First open (no history) shows the top-songs chart so there's always
+// something to play. Cached for the session.
+// ===================================================================
+let _recCache = null;
+async function renderRecommendations() {
+  const wrap = document.getElementById('playlist-wrap');
+  if (_recCache) { _renderRecList(_recCache); return; }
+  wrap.innerHTML = `<div id="empty-state"><div class="spinner"></div></div>`;
+  try {
+    const data = await api('/top/song?type=0');
+    const songs = (data.data || []).slice(0, 30);
+    if (!songs.length) throw new Error('empty');
+    _recCache = songs;
+    _renderRecList(songs);
+  } catch (e) {
+    // Fall back to the original quiet empty state if the API isn't ready.
+    wrap.innerHTML = `<div id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
+      <span>搜索你喜欢的音乐</span>
+    </div>`;
+  }
+}
+
+function _renderRecList(songs) {
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'history-header';
+  label.textContent = '🔥 热门推荐';
+  wrap.appendChild(label);
+  songs.forEach((song, i) => {
+    const artistStr = (song.artists || song.ar || []).map(a => a.name).join(' / ') || '未知歌手';
+    const dur = song.duration ? formatTime(song.duration / 1000) : (song.dt ? formatTime(song.dt / 1000) : '');
+    const picUrl = song.al?.picUrl || song.album?.picUrl || '';
+    const fee = song.fee ?? 0;
+    const unplayable = fee > 0 && !sessionCookie;
+    const div = document.createElement('div');
+    div.className = 'song-item' + (unplayable ? ' unplayable' : '');
+    div.dataset.songId = song.id;
+    const thumbHtml = picUrl
+      ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
+      : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
+    const vipBadge = unplayable ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    div.innerHTML = `
+      ${thumbHtml}
+      <div class="song-info">
+        <div class="song-name">${escHtml(song.name)}${vipBadge}</div>
+        <div class="song-artist">${escHtml(artistStr)}</div>
+      </div>
+      <div class="eq-icon"><span></span><span></span><span></span></div>
+      ${dur ? `<div class="song-dur">${dur}</div>` : ''}
+    `;
+    bindSongItem(div, song, () => playFromBrowse(songs, i));
+    wrap.appendChild(div);
   });
 }
 
@@ -4518,7 +4735,6 @@ async function loadPlaylistTracks(playlistId, playlistName) {
   try {
     const data = await api(`/playlist/track/all?id=${playlistId}&limit=1000&timestamp=${Date.now()}`);
     const songs = data.songs || [];
-    state.playlist = songs;
     wrap.removeChild(loading);
     // Render song items in mylist-wrap
     const label = document.createElement('div');
@@ -4532,6 +4748,7 @@ async function loadPlaylistTracks(playlistId, playlistName) {
       const div = document.createElement('div');
       div.className = 'song-item';
       div.dataset.idx = i;
+      div.dataset.songId = song.id;
       let thumbHtml = picUrl
         ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
         : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
@@ -4544,7 +4761,7 @@ async function loadPlaylistTracks(playlistId, playlistName) {
         <div class="eq-icon"><span></span><span></span><span></span></div>
         ${dur ? `<div class="song-dur">${dur}</div>` : ''}
       `;
-      div.addEventListener('click', () => playIndex(i));
+      bindSongItem(div, song, () => playFromBrowse(songs, i));
       wrap.appendChild(div);
     });
   } catch (e) {
