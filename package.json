@@ -49,6 +49,7 @@
     "NeteaseCloudMusicApi": "^4.32.0"
   },
   "overrides": {
+    "brace-expansion": "5.0.8",
     "music-metadata": "11.14.0"
   }
 }
