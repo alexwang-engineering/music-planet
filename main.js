@@ -69,8 +69,8 @@ function createWindow() {
   nativeTheme.themeSource = 'dark'
 
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: 1100,
+    height: 700,
     minWidth: 1100,
     minHeight: 700,
     titleBarStyle: 'hiddenInset',   // macOS traffic lights, no visible title bar
