@@ -1276,44 +1276,76 @@
     -webkit-app-region: drag;
   }
 </style>
+<link rel="stylesheet" href="./experience.css">
 </head>
-<body>
+<body class="motion-layout visual-high-refresh metrics-composited" data-layout-mode="browse">
 
 <!-- hiddenInset title bar: this strip is the window's drag handle -->
 <div id="titlebar-drag"></div>
 
-<canvas id="three-canvas"></canvas>
-<canvas id="liquid-canvas"></canvas>
+<canvas id="three-canvas" aria-hidden="true"></canvas>
+<canvas id="liquid-canvas" aria-hidden="true"></canvas>
+<div id="ambient-bloom" aria-hidden="true"></div>
 <div id="bg-gradient"></div>
 
 <!-- LEFT PANEL -->
-<div class="panel" id="left-panel">
+<main class="panel" id="left-panel" aria-label="音乐浏览">
   <div id="search-wrap">
     <div class="search-input-wrap">
       <span class="search-icon">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="5.5" r="4"/><line x1="9" y1="9" x2="13" y2="13"/></svg>
       </span>
-      <input type="text" id="search-input" placeholder="搜索歌曲、歌手..." autocomplete="off" spellcheck="false">
+      <label class="sr-only" for="search-input">搜索音乐</label>
+      <input type="text" id="search-input" placeholder="搜索歌曲..." autocomplete="off" spellcheck="false">
     </div>
     <button id="login-btn" title="登录网易云账号可解锁更多歌曲">登录</button>
   </div>
-  <div id="panel-tabs" class="hidden">
-    <button class="panel-tab active" id="tab-search">搜索结果</button>
-    <button class="panel-tab" id="tab-mylist">我的歌单</button>
+  <div id="panel-tabs" class="hidden" role="tablist" aria-label="浏览内容">
+    <button class="panel-tab active" id="tab-search" role="tab" aria-selected="true" aria-controls="playlist-wrap" tabindex="0">搜索结果</button>
+    <button class="panel-tab" id="tab-mylist" role="tab" aria-selected="false" aria-controls="mylist-wrap" tabindex="-1">我的歌单</button>
   </div>
-  <div id="playlist-wrap">
+  <div id="search-types" role="tablist" aria-label="搜索类别">
+    <button class="search-type active" role="tab" aria-selected="true" aria-controls="playlist-wrap" data-type="song" tabindex="0">歌曲</button>
+    <button class="search-type" role="tab" aria-selected="false" aria-controls="playlist-wrap" data-type="artist" tabindex="-1">歌手</button>
+    <button class="search-type" role="tab" aria-selected="false" aria-controls="playlist-wrap" data-type="album" tabindex="-1">专辑</button>
+    <button class="search-type" role="tab" aria-selected="false" aria-controls="playlist-wrap" data-type="playlist" tabindex="-1">歌单</button>
+  </div>
+  <div id="search-filters" role="group" aria-label="筛选搜索结果">
+    <button class="search-filter active" data-filter="all" aria-pressed="true">全部</button>
+    <button class="search-filter" data-filter="original" aria-pressed="false">原版</button>
+    <button class="search-filter" data-filter="live" aria-pressed="false">现场</button>
+    <button class="search-filter" data-filter="collaboration" aria-pressed="false">合作</button>
+    <button class="search-filter" data-filter="playable" aria-pressed="false">可播放</button>
+  </div>
+  <div id="search-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="entity-nav" class="entity-nav" aria-hidden="true">
+    <button id="entity-back" type="button" aria-label="返回搜索结果">←</button>
+    <div class="entity-nav-copy">
+      <span class="entity-nav-kicker">详情</span>
+      <strong id="entity-nav-title"></strong>
+    </div>
+  </div>
+  <div id="playlist-wrap" class="view-transition-content" role="tabpanel" aria-labelledby="tab-search">
     <div id="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
       <span>搜索你喜欢的音乐</span>
     </div>
   </div>
-  <div id="mylist-wrap">
+  <div id="mylist-wrap" class="view-transition-content" role="tabpanel" aria-labelledby="tab-mylist" aria-hidden="true" inert>
     <button id="back-to-playlists" style="display:none">← 返回歌单列表</button>
   </div>
-</div>
+  <div
+    class="panel-resizer"
+    id="left-panel-resizer"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="调整搜索面板宽度"
+    tabindex="0"
+  ></div>
+</main>
 
 <!-- RIGHT PANEL -->
-<div class="panel" id="right-panel">
+<aside class="panel" id="right-panel" aria-label="正在播放与歌词">
   <div id="right-orbit-card">
     <div id="right-art-wrap">
       <img id="right-album-art" src="" alt="" style="display:none">
@@ -1344,10 +1376,18 @@
       <span>暂无歌词</span>
     </div>
   </div>
-</div>
+  <div
+    class="panel-resizer"
+    id="right-panel-resizer"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="调整歌词面板宽度"
+    tabindex="0"
+  ></div>
+</aside>
 
 <!-- BOTTOM BAR -->
-<div class="panel" id="bottom-bar">
+<div class="panel" id="bottom-bar" role="region" aria-label="播放器控制">
   <!-- Song info -->
   <div class="bar-song-info">
     <div id="bar-art-wrap" style="width:52px;height:52px;border-radius:10px;background:rgba(255,255,255,0.07);flex-shrink:0;position:relative;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
@@ -1365,27 +1405,36 @@
   <!-- Center: controls + progress -->
   <div class="bar-center">
     <div class="controls">
-      <button class="ctrl-btn" id="btn-shuffle" title="随机播放">
+      <button class="ctrl-btn" id="btn-shuffle" title="随机播放：关" aria-label="随机播放：关" aria-pressed="false">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
       </button>
       <button class="ctrl-btn" id="btn-prev" title="上一首">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h2v10H2zm2 5L12 2v10L4 7z"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-play-pause" title="播放/暂停">
-        <svg id="icon-play" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
-        <svg id="icon-pause" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display:none"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>
+      <button class="ctrl-btn motion-icon-swap" id="btn-play-pause" title="播放" aria-label="播放" aria-pressed="false">
+        <svg data-motion-icon id="icon-play" aria-hidden="false" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
+        <svg data-motion-icon id="icon-pause" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>
       </button>
       <button class="ctrl-btn" id="btn-next" title="下一首">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M12 2h-2v10h2zm-2 5L2 2v10l8-5z"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-repeat" title="循环模式">
-        <svg id="icon-repeat-all" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-        <svg id="icon-repeat-one" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/><line x1="11" y1="9" x2="11" y2="15"/></svg>
+      <button class="ctrl-btn motion-icon-swap" id="btn-repeat" title="循环：关" aria-label="循环：关" aria-pressed="false">
+        <svg data-motion-icon id="icon-repeat-all" aria-hidden="false" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        <svg data-motion-icon id="icon-repeat-one" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/><line x1="11" y1="9" x2="11" y2="15"/></svg>
       </button>
     </div>
     <div class="progress-area">
       <span id="time-current">0:00</span>
-      <div id="progress-bar-wrap">
+      <div
+        id="progress-bar-wrap"
+        role="slider"
+        tabindex="0"
+        aria-label="播放进度"
+        aria-valuemin="0"
+        aria-valuemax="0"
+        aria-valuenow="0"
+        aria-valuetext="0:00 / --:--"
+      >
         <div class="progress-track">
           <div id="progress-fill"></div>
         </div>
@@ -1397,104 +1446,169 @@
 
   <!-- Right: theme + volume + like -->
   <div class="bar-right">
-    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-      <span id="sleep-indicator"></span>
+    <button class="ctrl-btn" id="btn-settings" title="播放与视觉设置" aria-haspopup="dialog" aria-expanded="false">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+        <circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/>
+      </svg>
     </button>
-    <div class="theme-dots">
-      <div class="theme-dot" data-theme="orange"  style="background:#ff5012" title="橙焰"></div>
-      <div class="theme-dot" data-theme="crimson" style="background:#ff1a3f" title="绯红"></div>
-      <div class="theme-dot" data-theme="rose"    style="background:#ff2080" title="玫瑰"></div>
-      <div class="theme-dot active" data-theme="violet"  style="background:#7A2CFF" title="紫罗兰"></div>
-      <div class="theme-dot" data-theme="blue"    style="background:#1870ff" title="钴蓝"></div>
-      <div class="theme-dot" data-theme="teal"    style="background:#00c8a0" title="青碧"></div>
-      <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
-      <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
-    </div>
-    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/></svg>
-    </button>
-    <button class="ctrl-btn" id="btn-visual" title="视觉模式">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
-    </button>
-    <button class="ctrl-btn" id="btn-queue" title="播放队列">
+    <button class="ctrl-btn" id="btn-queue" title="播放队列" aria-haspopup="dialog" aria-expanded="false">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     </button>
     <div class="volume-wrap">
-      <svg class="vol-icon" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 5h2.5L8 2v10L4.5 9H2V5zm9-2.5a6 6 0 010 9M8.5 5a3 3 0 010 4"/></svg>
-      <input type="range" id="volume-slider" min="0" max="100" value="80">
+      <button class="ctrl-btn vol-icon" id="btn-mute" type="button" title="静音" aria-label="静音" aria-pressed="false">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 5h2.5L8 2v10L4.5 9H2V5zm9-2.5a6 6 0 010 9M8.5 5a3 3 0 010 4"/></svg>
+      </button>
+      <input type="range" id="volume-slider" min="0" max="100" value="80" aria-label="音量">
     </div>
-    <button class="ctrl-btn" id="btn-like" title="喜欢">
-      <svg id="icon-heart" width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
-      <svg id="icon-heart-filled" width="15" height="14" viewBox="0 0 15 14" fill="currentColor" style="display:none"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
+    <button class="ctrl-btn motion-icon-swap" id="btn-like" title="加入喜欢" aria-label="加入喜欢" aria-pressed="false">
+      <svg data-motion-icon id="icon-heart" aria-hidden="false" width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
+      <svg data-motion-icon id="icon-heart-filled" aria-hidden="true" width="15" height="14" viewBox="0 0 15 14" fill="currentColor"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
     </button>
   </div>
 </div>
 
-<!-- VISUAL MODE PANEL -->
-<div id="visual-panel" class="hidden">
-  <button class="visual-option active" data-visual="planet">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
-    <span>星球</span>
-  </button>
-  <button class="visual-option" data-visual="liquidAura">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
-    <span>流光</span>
-  </button>
-</div>
+<!-- UNIFIED PLAYBACK + VISUAL SETTINGS -->
+<div id="settings-panel" class="hidden motion-popover" role="dialog" aria-modal="false" aria-labelledby="settings-title" aria-hidden="true" tabindex="-1" inert>
+  <div class="settings-header">
+    <div>
+      <span class="settings-kicker">NEBULA</span>
+      <strong id="settings-title">播放与视觉</strong>
+    </div>
+    <button id="settings-close" type="button" aria-label="关闭设置">×</button>
+  </div>
 
-<!-- VIZ TUNER PANEL (rows are built by buildTunerPanel()) -->
-<div id="tuner-panel" class="hidden">
-  <div class="tuner-title">
-    <span>节奏调节器</span>
-    <button id="tuner-reset">恢复默认</button>
+  <section class="settings-section">
+    <button class="setting-row" id="btn-layout" type="button" aria-pressed="false" title="切换到沉浸模式">
+      <span class="setting-row-icon">
+        <svg data-motion-icon data-layout-icon="browse" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <line x1="8" y1="5" x2="8" y2="19"/>
+          <line x1="16" y1="5" x2="16" y2="19"/>
+        </svg>
+        <svg data-motion-icon data-layout-icon="immersive" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>
+          <circle cx="12" cy="12" r="3.5"/>
+        </svg>
+      </span>
+      <span class="setting-row-copy">
+        <strong>界面布局</strong>
+        <small id="layout-mode-copy">浏览模式</small>
+      </span>
+      <span class="setting-row-value" id="layout-action-copy">进入沉浸</span>
+    </button>
+
+    <button class="setting-row" id="btn-sleep" type="button" title="睡眠定时" aria-pressed="false">
+      <span class="setting-row-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </span>
+      <span class="setting-row-copy"><strong>睡眠定时</strong><small>到时柔和停止播放</small></span>
+      <span class="setting-row-value" id="sleep-indicator">关闭</span>
+    </button>
+  </section>
+
+  <section class="settings-section">
+    <div class="settings-section-label">视觉模式</div>
+    <div class="visual-options" role="radiogroup" aria-label="视觉模式">
+      <button class="visual-option active" data-visual="planet" role="radio" aria-checked="true" tabindex="0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
+        <span>星球</span>
+      </button>
+      <button class="visual-option" data-visual="liquidAura" role="radio" aria-checked="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
+        <span>流光</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <div class="settings-section-label">主题色</div>
+    <div class="theme-dots" role="radiogroup" aria-label="主题色">
+      <button type="button" class="theme-dot" data-theme="orange"  style="--swatch:#ff5012" aria-label="橙焰" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot" data-theme="crimson" style="--swatch:#ff1a3f" aria-label="绯红" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot" data-theme="rose"    style="--swatch:#ff2080" aria-label="玫瑰" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot active" data-theme="violet" style="--swatch:#7A2CFF" aria-label="紫罗兰" role="radio" aria-checked="true" tabindex="0"></button>
+      <button type="button" class="theme-dot" data-theme="blue"    style="--swatch:#1870ff" aria-label="钴蓝" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot" data-theme="teal"    style="--swatch:#00c8a0" aria-label="青碧" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot" data-theme="green"   style="--swatch:#00c855" aria-label="翡翠" role="radio" aria-checked="false" tabindex="-1"></button>
+      <button type="button" class="theme-dot" data-theme="mix" aria-label="彩虹流光" role="radio" aria-checked="false" tabindex="-1"></button>
+    </div>
+  </section>
+
+  <section class="settings-section settings-volume">
+    <label for="settings-volume-slider">音量</label>
+    <input type="range" id="settings-volume-slider" min="0" max="100" value="80" aria-valuetext="80%">
+    <output id="settings-volume-value" for="settings-volume-slider">80%</output>
+  </section>
+
+  <section class="settings-section">
+    <button class="settings-disclosure" id="btn-tuner" type="button" aria-expanded="false" aria-controls="tuner-panel">
+      <span>节奏响应</span>
+      <span class="settings-disclosure-copy">高级</span>
+      <span class="settings-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div id="tuner-panel" class="hidden" aria-hidden="true" inert>
+      <div class="tuner-title">
+        <span>细节调节</span>
+        <button id="tuner-reset" type="button">恢复默认</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="settings-shortcuts">
+    <span>Space 播放</span><span>← → 快进退</span><span>⌥M 静音</span><span>⌥I 沉浸</span>
   </div>
 </div>
 
 <!-- PLAY QUEUE PANEL -->
-<div id="queue-panel" class="hidden">
+<div id="queue-panel" class="hidden" role="dialog" aria-modal="false" aria-label="播放队列" aria-hidden="true" inert>
   <div class="queue-header">
     <span>播放队列</span>
-    <button id="queue-close">×</button>
+    <button id="queue-close" type="button" aria-label="关闭播放队列">×</button>
   </div>
-  <div id="queue-list"></div>
+  <div id="queue-list" role="listbox" aria-label="播放队列歌曲" tabindex="0"></div>
 </div>
 
-<div id="toast"></div>
+<div id="toast">
+  <span id="toast-message" role="status" aria-live="polite" aria-atomic="true"></span>
+  <button id="toast-action" type="button" hidden>撤销</button>
+</div>
 
 <!-- Right-click menu for song rows -->
-<div id="ctx-menu" class="hidden">
-  <div class="ctx-item" data-act="playnext">
+<div id="ctx-menu" class="hidden motion-popover" role="menu" aria-label="歌曲操作" aria-hidden="true" inert>
+  <button type="button" class="ctx-item" role="menuitem" data-act="playnext">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
     下一首播放
-  </div>
-  <div class="ctx-item" data-act="addqueue">
+  </button>
+  <button type="button" class="ctx-item" role="menuitem" data-act="addqueue">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     加入队列
-  </div>
+  </button>
 </div>
 
 <!-- QR LOGIN MODAL -->
-<div id="qr-modal" class="hidden">
+<div id="qr-modal" class="hidden motion-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true" inert>
   <div id="qr-box">
-    <h3>登录网易云音乐</h3>
-    <div class="login-tabs">
-      <button class="login-tab active" id="tab-qr">扫码登录</button>
-      <button class="login-tab" id="tab-phone">手机号登录</button>
+    <h3 id="login-title">登录网易云音乐</h3>
+    <div class="login-tabs" role="tablist" aria-label="登录方式">
+      <button class="login-tab active" id="tab-qr" type="button" role="tab" aria-selected="true" aria-controls="qr-section" tabindex="0">扫码登录</button>
+      <button class="login-tab" id="tab-phone" type="button" role="tab" aria-selected="false" aria-controls="phone-section" tabindex="-1">手机号登录</button>
     </div>
-    <div id="qr-section">
+    <div id="qr-section" role="tabpanel" aria-labelledby="tab-qr">
       <p>用手机 App 扫描二维码</p>
-      <img id="qr-img" src="" alt="QR Code">
-      <div id="qr-status">正在生成二维码...</div>
+      <img id="qr-img" src="" alt="网易云音乐登录二维码">
+      <div id="qr-status" role="status" aria-live="polite" aria-atomic="true">正在生成二维码...</div>
     </div>
-    <div id="phone-section">
+    <form id="phone-section" role="tabpanel" aria-labelledby="tab-phone" hidden inert>
       <p>输入网易云音乐账号密码</p>
-      <input class="login-field" id="phone-input" type="tel" placeholder="手机号">
-      <input class="login-field" id="password-input" type="password" placeholder="密码">
-      <button id="phone-submit">登 录</button>
-      <div id="phone-status"></div>
-    </div>
-    <button id="qr-close">取消</button>
+      <label class="sr-only" for="phone-input">手机号</label>
+      <input class="login-field" id="phone-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="手机号" required aria-describedby="phone-status" aria-invalid="false">
+      <label class="sr-only" for="password-input">密码</label>
+      <input class="login-field" id="password-input" name="password" type="password" autocomplete="current-password" placeholder="密码" required aria-describedby="phone-status" aria-invalid="false">
+      <button id="phone-submit" type="submit">登 录</button>
+      <div id="phone-status" role="status" aria-live="polite" aria-atomic="true"></div>
+    </form>
+    <button id="qr-close" type="button">取消</button>
   </div>
 </div>
 
@@ -1510,23 +1624,329 @@
 // Vendored locally — a CDN import here meant the packaged app was fully
 // broken offline (this module holds ALL app logic, not just the visuals).
 import * as THREE from './vendor/three.module.js';
+import { FrameBudgetMonitor, isPerformanceDebugEnabled } from './frame-budget.mjs';
+import {
+  groupSearchResults,
+  prepareSearchResults,
+  SEARCH_FILTERS,
+} from './search-results.mjs';
+import {
+  ENTITY_TYPES,
+  buildEntitySearchEndpoint,
+  buildEntityTracksEndpoint,
+  prepareEntitySearchResults,
+} from './search-entities.mjs';
+import {
+  createLayoutModeController,
+  setLayoutModeTransitioning,
+} from './layout-mode.mjs';
+import { createPlaybackProgressController } from './playback-progress.mjs';
+import {
+  PLAYLIST_SORTS,
+  preparePlaylistLibrary,
+} from './playlist-library.mjs';
+import {
+  addToQueueEnd,
+  playNext as insertQueueNext,
+  undoQueueAction,
+} from './queue-actions.mjs';
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not(:disabled)',
+  'input:not(:disabled)',
+  'select:not(:disabled)',
+  'textarea:not(:disabled)',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function getFocusableElements(container) {
+  return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(element => (
+    !element.hidden
+    && !element.closest('[hidden], [inert], [aria-hidden="true"]')
+    && getComputedStyle(element).visibility !== 'hidden'
+  ));
+}
+
+function trapTabWithin(event, container) {
+  if (event.key !== 'Tab') return false;
+  const focusable = getFocusableElements(container);
+  if (!focusable.length) {
+    event.preventDefault();
+    container.focus?.({ preventScroll: true });
+    return true;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+    return true;
+  }
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+    return true;
+  }
+  return false;
+}
+
+function syncRovingSelection(container, selector, selectedItem = null) {
+  const items = [...container.querySelectorAll(selector)].filter(item => !item.disabled);
+  if (!items.length) return;
+  const selected = selectedItem
+    || items.find(item => item.getAttribute('aria-selected') === 'true')
+    || items.find(item => item.getAttribute('aria-checked') === 'true')
+    || items[0];
+  items.forEach(item => {
+    item.tabIndex = item === selected ? 0 : -1;
+  });
+}
+
+function setupRovingControlGroup(container, selector) {
+  if (!container) return;
+  syncRovingSelection(container, selector);
+  container.addEventListener('click', event => {
+    const item = event.target.closest(selector);
+    if (item && container.contains(item)) syncRovingSelection(container, selector, item);
+  });
+  container.addEventListener('keydown', event => {
+    const item = event.target.closest(selector);
+    if (!item || !container.contains(item)) return;
+    const items = [...container.querySelectorAll(selector)].filter(candidate => !candidate.disabled);
+    const currentIndex = items.indexOf(item);
+    let nextIndex = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % items.length;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (currentIndex - 1 + items.length) % items.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = items.length - 1;
+    }
+    if (nextIndex == null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = items[nextIndex];
+    syncRovingSelection(container, selector, next);
+    next.focus({ preventScroll: true });
+    next.click();
+  });
+}
+
+setupRovingControlGroup(document.getElementById('panel-tabs'), '[role="tab"]');
+setupRovingControlGroup(document.querySelector('.login-tabs'), '[role="tab"]');
+setupRovingControlGroup(document.querySelector('.visual-options'), '[role="radio"]');
+setupRovingControlGroup(document.querySelector('.theme-dots'), '[role="radio"]');
+
+const layoutRoot = document.body;
+const layoutButton = document.getElementById('btn-layout');
+const layoutModeController = createLayoutModeController({
+  storage: localStorage,
+  root: layoutRoot,
+  button: layoutButton,
+});
+layoutModeController.init();
+let layoutTransitionSerial = 0;
+
+function updateLayoutSettingCopy(mode = layoutModeController.mode) {
+  const immersive = mode === 'immersive';
+  document.getElementById('layout-mode-copy').textContent = immersive ? '沉浸模式' : '浏览模式';
+  document.getElementById('layout-action-copy').textContent = immersive ? '返回浏览' : '进入沉浸';
+}
+
+function transitionTimeMs(element) {
+  if (!element) return 0;
+  const style = getComputedStyle(element);
+  const toMs = value => value.trim().endsWith('ms')
+    ? Number.parseFloat(value)
+    : Number.parseFloat(value) * 1000;
+  const durations = style.transitionDuration.split(',').map(toMs);
+  const delays = style.transitionDelay.split(',').map(toMs);
+  return durations.reduce((max, duration, index) => (
+    Math.max(max, duration + (delays[index % delays.length] || 0))
+  ), 0);
+}
+
+function toggleLayoutMode({ announce = true } = {}) {
+  const serial = ++layoutTransitionSerial;
+  setLayoutModeTransitioning(layoutRoot, true);
+  const result = layoutModeController.toggle();
+  layoutButton.classList.toggle('active', result.mode === 'immersive');
+  updateLayoutSettingCopy(result.mode);
+
+  const animatedElements = [
+    document.getElementById('left-panel'),
+    document.getElementById('right-panel'),
+    document.getElementById('three-canvas'),
+  ];
+  const finish = () => {
+    if (serial !== layoutTransitionSerial) return;
+    setLayoutModeTransitioning(layoutRoot, false);
+  };
+  animatedElements.forEach(element => {
+    element?.addEventListener('transitionend', event => {
+      if (event.propertyName === 'transform') finish();
+    }, { once: true });
+  });
+  const fallbackMs = Math.max(...animatedElements.map(transitionTimeMs), 0);
+  window.setTimeout(finish, fallbackMs + 34);
+
+  if (announce) {
+    showToast(result.mode === 'immersive' ? '已进入沉浸模式' : '已返回浏览模式');
+  }
+}
+
+layoutButton.classList.toggle('active', layoutModeController.mode === 'immersive');
+updateLayoutSettingCopy();
+layoutButton.addEventListener('click', () => toggleLayoutMode());
+
+const PANEL_WIDTH_STORAGE_KEY = 'nebula.panel-widths';
+const PANEL_WIDTH_DEFAULTS = Object.freeze({ left: 300, right: 280 });
+const PANEL_WIDTH_MIN = Object.freeze({ left: 260, right: 250 });
+const panelWidths = { ...PANEL_WIDTH_DEFAULTS };
+
+function panelWidthMax(side) {
+  const otherSide = side === 'left' ? 'right' : 'left';
+  const otherWidth = panelWidths[otherSide];
+  return Math.max(
+    PANEL_WIDTH_MIN[side],
+    Math.min(380, window.innerWidth - otherWidth - 464),
+  );
+}
+
+function clampPanelWidth(side, value) {
+  return Math.round(Math.max(
+    PANEL_WIDTH_MIN[side],
+    Math.min(panelWidthMax(side), Number(value) || PANEL_WIDTH_DEFAULTS[side]),
+  ));
+}
+
+function updatePanelWidth(side, value) {
+  const width = clampPanelWidth(side, value);
+  panelWidths[side] = width;
+  layoutRoot.style.setProperty(`--${side}-w`, `${width}px`);
+  const handle = document.getElementById(`${side}-panel-resizer`);
+  handle?.setAttribute('aria-valuemin', String(PANEL_WIDTH_MIN[side]));
+  handle?.setAttribute('aria-valuemax', String(panelWidthMax(side)));
+  handle?.setAttribute('aria-valuenow', String(width));
+  handle?.setAttribute('aria-valuetext', `${width} 像素`);
+  return width;
+}
+
+function persistPanelWidths() {
+  try {
+    localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, JSON.stringify(panelWidths));
+  } catch (_) {}
+}
+
+function clampPanelWidths() {
+  updatePanelWidth('left', panelWidths.left);
+  updatePanelWidth('right', panelWidths.right);
+}
+
+try {
+  const savedPanelWidths = JSON.parse(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY) || 'null');
+  if (savedPanelWidths && typeof savedPanelWidths === 'object') {
+    panelWidths.left = clampPanelWidth('left', savedPanelWidths.left);
+    panelWidths.right = clampPanelWidth('right', savedPanelWidths.right);
+  }
+} catch (_) {}
+clampPanelWidths();
+
+function setupPanelResizer(side) {
+  const handle = document.getElementById(`${side}-panel-resizer`);
+  let startX = 0;
+  let startWidth = panelWidths[side];
+  let pendingWidth = startWidth;
+  let resizeWriteFrame = 0;
+
+  const commitPendingWidth = () => {
+    resizeWriteFrame = 0;
+    updatePanelWidth(side, pendingWidth);
+  };
+  const queueWidth = value => {
+    pendingWidth = value;
+    if (!resizeWriteFrame) resizeWriteFrame = requestAnimationFrame(commitPendingWidth);
+  };
+  const finishResize = event => {
+    if (!layoutRoot.classList.contains('panel-is-resizing')) return;
+    if (resizeWriteFrame) {
+      cancelAnimationFrame(resizeWriteFrame);
+      commitPendingWidth();
+    }
+    layoutRoot.classList.remove('panel-is-resizing');
+    if (event?.pointerId != null && handle.hasPointerCapture?.(event.pointerId)) {
+      handle.releasePointerCapture(event.pointerId);
+    }
+    persistPanelWidths();
+  };
+
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    startX = event.clientX;
+    startWidth = panelWidths[side];
+    pendingWidth = startWidth;
+    handle.setPointerCapture?.(event.pointerId);
+    layoutRoot.classList.add('panel-is-resizing');
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!layoutRoot.classList.contains('panel-is-resizing')) return;
+    const delta = event.clientX - startX;
+    queueWidth(startWidth + (side === 'left' ? delta : -delta));
+  });
+  handle.addEventListener('pointerup', finishResize);
+  handle.addEventListener('pointercancel', finishResize);
+  handle.addEventListener('dblclick', () => {
+    updatePanelWidth(side, PANEL_WIDTH_DEFAULTS[side]);
+    persistPanelWidths();
+  });
+  handle.addEventListener('keydown', event => {
+    const step = event.shiftKey ? 20 : 10;
+    let nextWidth = null;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+      nextWidth = panelWidths[side] - step;
+    } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+      nextWidth = panelWidths[side] + step;
+    } else if (event.key === 'Home') {
+      nextWidth = PANEL_WIDTH_MIN[side];
+    } else if (event.key === 'End') {
+      nextWidth = panelWidthMax(side);
+    }
+    if (nextWidth == null) return;
+    event.preventDefault();
+    updatePanelWidth(side, nextWidth);
+    persistPanelWidths();
+  });
+}
+
+setupPanelResizer('left');
+setupPanelResizer('right');
 
 // ===================================================================
 // SCENE SETUP
 // ===================================================================
 const canvas = document.getElementById('three-canvas');
+const RENDER_DPR_CAP = 1.25;
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
-  alpha: true,
+  alpha: false,
+  stencil: false,
   powerPreference: 'high-performance',
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.4));
-renderer.setSize(window.innerWidth, window.innerHeight);
+let rendererDpr = Math.min(window.devicePixelRatio || 1, RENDER_DPR_CAP);
+renderer.setPixelRatio(rendererDpr);
+renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.setClearColor(0x03050e, 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.4;  // compensate for ACES darkening; keeps glow sphere vivid
+const perfMonitor = new FrameBudgetMonitor({
+  enabled: isPerformanceDebugEnabled(),
+});
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x060b18, 18, 55);
 
@@ -1534,11 +1954,24 @@ const camera = new THREE.PerspectiveCamera(64, window.innerWidth / window.innerH
 camera.position.set(0, 1.2, 4.2);
 camera.lookAt(0, 0.0, -1.5);
 
-window.addEventListener('resize', () => {
+let resizeFrame = 0;
+function resizeVisualSurfaces() {
+  resizeFrame = 0;
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.4));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  const nextDpr = Math.min(window.devicePixelRatio || 1, RENDER_DPR_CAP);
+  if (nextDpr !== rendererDpr) {
+    rendererDpr = nextDpr;
+    renderer.setPixelRatio(rendererDpr);
+  }
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  _resizeLiquidCanvas();
+  clampPanelWidths();
+  _progressRect = null;
+}
+window.addEventListener('resize', () => {
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(resizeVisualSurfaces);
 });
 
 // ===================================================================
@@ -2523,20 +2956,43 @@ function spawnShockwave(secondary = false) {
   mesh.rotation.z += (Math.random() - 0.5) * 0.5;
   scene.add(mesh);
   // Shockwave lifetime adapts to tempo — fast BPM = shorter waves to prevent pile-up
-  const _swMaxAge = Math.max(24, Math.round(_beatInterval * 60 * (secondary ? 0.85 : 1.15)));
-  shockwaves.push({ mesh, mat, geo, age: 0, maxAge: _swMaxAge, secondary });
+  const maxAgeSec = Math.max(0.4, _beatInterval * (secondary ? 0.85 : 1.15));
+  shockwaves.push({ mesh, mat, geo, ageSec: 0, maxAgeSec, secondary });
 }
 
 // ===================================================================
 // WEB AUDIO API
 // ===================================================================
 const audio = document.getElementById('audio');
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+const playbackProgress = createPlaybackProgressController({
+  media: audio,
+  target: document.getElementById('progress-fill'),
+  visibility: document,
+  reducedMotion: reducedMotionQuery.matches,
+});
+reducedMotionQuery.addEventListener?.('change', event => {
+  playbackProgress.setReducedMotion(event.matches);
+});
+window.addEventListener('beforeunload', () => playbackProgress.destroy(), { once: true });
+
 let audioCtx = null;
 let analyser = null;
 let dataArray = null;
 let sourceNode = null;
 let compressor = null;
 let audioConnected = false;
+let audioResumePromise = null;
+
+function resumeAudioContext() {
+  if (!audioCtx || audioCtx.state !== 'suspended') return Promise.resolve();
+  if (!audioResumePromise) {
+    audioResumePromise = audioCtx.resume()
+      .catch(() => {})
+      .finally(() => { audioResumePromise = null; });
+  }
+  return audioResumePromise;
+}
 
 function initAudio() {
   if (audioConnected) return;
@@ -2569,20 +3025,29 @@ function initAudio() {
 let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
 let fluxLevel = 0, brightnessLevel = 0;
 let prevDataArray = null;
-// Rolling 90-frame bass history for dynamic beat threshold (~1.5s at 60fps)
-const bassHistory = new Float32Array(90);
-let bassHistIdx = 0;
 // Bass-band spectral flux — the kick-attack signal. Absolute bass level fails
 // on sustained-808 tracks (rap: level never dips → threshold chases it and no
 // beat ever fires); flux spikes on every new attack regardless of level.
 let bassFluxLevel = 0;
-const bassFluxHistory = new Float32Array(43);   // ~0.7s local window
+const AUDIO_SAMPLE_INTERVAL = 1 / 60;
+let audioSampleAccumulator = AUDIO_SAMPLE_INTERVAL;
+const bassFluxHistory = new Float32Array(43);   // ~0.7s at the fixed 60Hz analysis rate
 let bassFluxIdx = 0;
+let bassFluxHistorySum = 0;
 let _prevBassFlux = 0;
 
-function updateAudio() {
-  if (!analyser) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+function updateAudio(delta) {
+  if (!analyser) return false;
+
+  // Audio analysis intentionally stays at 60Hz while the center surface can
+  // render at 90/120Hz. This preserves the detector's time windows and avoids
+  // doubling FFT/flux CPU work on high-refresh displays.
+  audioSampleAccumulator = Math.min(
+    audioSampleAccumulator + delta,
+    AUDIO_SAMPLE_INTERVAL * 2,
+  );
+  if (audioSampleAccumulator < AUDIO_SAMPLE_INTERVAL) return false;
+  audioSampleAccumulator %= AUDIO_SAMPLE_INTERVAL;
   analyser.getByteFrequencyData(dataArray);
 
   const binCount = dataArray.length;
@@ -2627,20 +3092,19 @@ function updateAudio() {
   fluxLevel       = rawFlux       > fluxLevel       ? fluxLevel       + (rawFlux       - fluxLevel)       * 0.70 : fluxLevel       + (rawFlux       - fluxLevel)       * 0.18;
   audioLevel      = audioLevel    + (rawOverall     - audioLevel)     * 0.15;
 
-  // Update rolling bass history for dynamic beat threshold
-  bassHistory[bassHistIdx] = bassLevel;
-  bassHistIdx = (bassHistIdx + 1) % bassHistory.length;
-
   // Fast-attack bass flux + rolling local window for the adaptive threshold
   bassFluxLevel = rawBassFlux > bassFluxLevel
     ? bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.85
     : bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.25;
+  bassFluxHistorySum -= bassFluxHistory[bassFluxIdx];
   bassFluxHistory[bassFluxIdx] = bassFluxLevel;
+  bassFluxHistorySum += bassFluxLevel;
   bassFluxIdx = (bassFluxIdx + 1) % bassFluxHistory.length;
 
   // Save this frame's spectrum for next-frame flux
   if (!prevDataArray) prevDataArray = new Uint8Array(binCount);
   prevDataArray.set(dataArray);
+  return true;
 }
 
 // ===================================================================
@@ -2657,11 +3121,9 @@ let _themeAccentColor = new THREE.Color(0x3a1280); // default: dark violet match
 const _glowTarget = new THREE.Color(); // scratch for per-frame blended glow target
 
 // Beat detection state
-let prevBass    = 0;
 let beatFlash   = 0;
-let beatCooldown = 0;
+let beatCooldownSec = 0;
 let spherePulse = 0;
-let pendingShockwave2 = 0;
 let _beatShake = 0;
 let _beatHueBurst = 0;
 let _lastBeatTime = 0;
@@ -2736,7 +3198,40 @@ let _breathe2Phase = 0;
 // Dynamic sphere color targets — lerped smoothly each frame
 let _tColor1 = new THREE.Color(0x2A0B3D);
 let _tColor2 = new THREE.Color(0x7A2CFF);
-let _mixHue = 0, _mixCssFrame = 0;
+let _mixHue = 0, _mixCssElapsed = 0;
+const _mixColorA = new THREE.Color();
+const _mixColorB = new THREE.Color();
+
+function alphaFrom60Hz(alphaAt60Hz, frame60) {
+  return 1 - Math.pow(1 - alphaAt60Hz, frame60);
+}
+
+function retainFrom60Hz(retainAt60Hz, frame60) {
+  return Math.pow(retainAt60Hz, frame60);
+}
+
+function updateMixTheme(delta, frame60) {
+  if (state.theme !== 'mix') return;
+
+  _mixHue = (_mixHue + (0.00018 + _sAudio * 0.0007) * frame60) % 1.0;
+  _tColor1.setHSL(_mixHue, 0.90, 0.12);
+  _tColor2.setHSL(_mixHue, 1.00, 0.50);
+  _mixCssElapsed += delta;
+  if (_mixCssElapsed < 0.30) return;
+  _mixCssElapsed %= 0.30;
+
+  _mixColorA.setHSL(_mixHue, 1.0, 0.56);
+  _mixColorB.setHSL((_mixHue + 0.08) % 1.0, 0.9, 0.68);
+  const html = document.documentElement;
+  html.style.setProperty('--accent',  '#' + _mixColorA.getHexString());
+  html.style.setProperty('--accent2', '#' + _mixColorB.getHexString());
+  const mr = Math.round(_mixColorA.r * 255);
+  const mg = Math.round(_mixColorA.g * 255);
+  const mb = Math.round(_mixColorA.b * 255);
+  html.style.setProperty('--accent-glow', `rgba(${mr},${mg},${mb},0.22)`);
+  applyEnvColor(_mixColorA);
+  updateLiquidAccent(_mixColorA);
+}
 
 const state = {
   playlist: [],
@@ -2760,12 +3255,12 @@ const metricEls = {
 };
 let lastMetricsUi = 0;
 let lastBgGlow = 0;
-const bgGradientEl = document.getElementById('bg-gradient');
+const ambientBloomEl = document.getElementById('ambient-bloom');
 
 function updateMetric(el, value) {
   if (!el?.bar || !el?.val) return;
   const clamped = Math.min(value, 1);
-  el.bar.style.width = (clamped * 100).toFixed(1) + '%';
+  el.bar.style.setProperty('--metric-level', clamped.toFixed(3));
   el.val.textContent = clamped.toFixed(2);
 }
 
@@ -2776,9 +3271,10 @@ function updateMetric(el, value) {
 // ===================================================================
 
 const _laCanvas = document.getElementById('liquid-canvas');
-const _laCtx = _laCanvas ? _laCanvas.getContext('2d') : null;
+const _laCtx = _laCanvas
+  ? _laCanvas.getContext('2d', { alpha: false, desynchronized: true })
+  : null;
 let _laTime = 0;
-let _laLastFrameTime = 0;
 let _laPlayBlend = 0;  // lerped 0→1 on play, decays to 0 on pause over ~1s
 
 // Album/theme accent for liquid aura — vivid HSL (the old satMax=0.42 clamp made everything mud)
@@ -2795,12 +3291,16 @@ function updateLiquidAccent(threeColor) {
 let _laDpr = 1;
 function _resizeLiquidCanvas() {
   if (!_laCanvas) return;
-  // Render at device resolution — the old CSS-pixel canvas was blurry on retina.
-  _laDpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Share the high-refresh render scale with WebGL. A 2x Retina buffer nearly
+  // triples the pixel work versus 1.25x and makes a stable 120Hz cadence unlikely.
+  _laDpr = Math.min(window.devicePixelRatio || 1, RENDER_DPR_CAP);
   _laCanvas.width  = Math.round(window.innerWidth  * _laDpr);
   _laCanvas.height = Math.round(window.innerHeight * _laDpr);
+  if (_laCtx) {
+    _laCtx.imageSmoothingEnabled = true;
+    _laCtx.imageSmoothingQuality = 'high';
+  }
 }
-window.addEventListener('resize', _resizeLiquidCanvas);
 _resizeLiquidCanvas();
 
 // Drifting particles (lazy init once viewport size is known)
@@ -2850,8 +3350,9 @@ function _renderLiquidAura(dt) {
   const isPlaying = !audio.paused;
 
   // Smooth blend: playing → 1 (fast attack ~0.4s), paused → 0 (slow decay ~1.5s)
-  const blendRate = isPlaying ? dt * 2.5 : dt * 0.65;
-  _laPlayBlend += ((isPlaying ? 1.0 : 0.0) - _laPlayBlend) * Math.min(blendRate, 1.0);
+  const blendRate = isPlaying ? 2.5 : 0.65;
+  const blendAlpha = 1 - Math.exp(-blendRate * dt);
+  _laPlayBlend += ((isPlaying ? 1.0 : 0.0) - _laPlayBlend) * blendAlpha;
   const pb = _laPlayBlend;
 
   if (!_laParticles) _laInitParticles(W, H);
@@ -2893,8 +3394,6 @@ function _renderLiquidAura(dt) {
 
   // Upscale the buffer to the full canvas — bilinear smoothing = seamless blend
   _laCtx.globalCompositeOperation = 'source-over';
-  _laCtx.imageSmoothingEnabled = true;
-  _laCtx.imageSmoothingQuality = 'high';
   _laCtx.drawImage(_laBuf, 0, 0, W, H);
 
   // ── Particles — faint stars drifting up through the aurora
@@ -2921,74 +3420,69 @@ function _renderLiquidAura(dt) {
   _laCtx.fillRect(0, 0, W, H);
 }
 
-function _animateLiquid() {
-  requestAnimationFrame(_animateLiquid);
-  if (state.visualMode !== 'liquidAura' || document.hidden) return;
-  const now = performance.now() / 1000;
-  if (_laLastFrameTime === 0) _laLastFrameTime = now;
-  const dt = Math.min(now - _laLastFrameTime, 0.05);
-  _laLastFrameTime = now;
-  _renderLiquidAura(dt);
-}
-_animateLiquid();
+let animationFrameId = 0;
 
-function animate() {
-  requestAnimationFrame(animate);
+function animate(frameTimestamp) {
+  animationFrameId = 0;
+  perfMonitor.beginFrame(frameTimestamp);
 
   if (document.hidden) {
     clock.getDelta();
+    perfMonitor.resetTimestamp();
     return;
   }
+  animationFrameId = requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.05);
+  const frame60 = delta * 60;
   time += delta;
 
-  updateAudio();
+  const hasNewAudioSample = updateAudio(delta);
 
   // ── Beat onset detection: bass-band spectral flux + adaptive threshold ──
   // Standard visualizer technique (flux = positive spectral change = attack
   // transients). Unlike absolute bass level, this fires on every kick even in
   // sustained-808 rap where the level never dips below its own average.
-  if (beatCooldown > 0) beatCooldown--;
-  let _fluxMean = 0;
-  for (let i = 0; i < bassFluxHistory.length; i++) _fluxMean += bassFluxHistory[i];
-  _fluxMean /= bassFluxHistory.length;
-  const fluxThreshold = Math.max(_fluxMean * 1.45, 0.045) / Math.max(VIZ.sens, 0.25);
-  const onBeat = bassFluxLevel > fluxThreshold && bassFluxLevel > _prevBassFlux * 1.05 && beatCooldown === 0;
-  // Hit strength 0..1.6 — how far this attack rises above the local average
-  const beatStrength = onBeat
-    ? Math.min(0.5 + (bassFluxLevel - fluxThreshold) / (fluxThreshold + 0.02), 1.6)
-    : 0;
-  if (onBeat) {
-    beatFlash     = Math.min((0.26 + beatStrength * 0.20) * VIZ.beat, 0.85);
-    spherePulse   = (0.15 + beatStrength * 0.10) * VIZ.beat;
-    _beatShake    = (0.28 + beatStrength * 0.22) * VIZ.camera;
-    _beatHueBurst = 0.3;
-    // Adaptive cooldown — tracks actual beat interval so fast songs stay locked
-    if (_lastBeatTime > 0) {
-      _beatInterval = _beatInterval * 0.82 + (time - _lastBeatTime) * 0.18;
+  beatCooldownSec = Math.max(0, beatCooldownSec - delta);
+  if (hasNewAudioSample) {
+    const fluxMean = bassFluxHistorySum / bassFluxHistory.length;
+    const fluxThreshold = Math.max(fluxMean * 1.45, 0.045) / Math.max(VIZ.sens, 0.25);
+    const onBeat =
+      bassFluxLevel > fluxThreshold &&
+      bassFluxLevel > _prevBassFlux * 1.05 &&
+      beatCooldownSec <= 0;
+    // Hit strength 0..1.6 — how far this attack rises above the local average
+    const beatStrength = onBeat
+      ? Math.min(0.5 + (bassFluxLevel - fluxThreshold) / (fluxThreshold + 0.02), 1.6)
+      : 0;
+    if (onBeat) {
+      beatFlash     = Math.min((0.26 + beatStrength * 0.20) * VIZ.beat, 0.85);
+      spherePulse   = (0.15 + beatStrength * 0.10) * VIZ.beat;
+      _beatShake    = (0.28 + beatStrength * 0.22) * VIZ.camera;
+      _beatHueBurst = 0.3;
+      // Adaptive cooldown is measured in seconds, so it behaves identically
+      // on 60, 90 and 120Hz displays.
+      if (_lastBeatTime > 0) {
+        _beatInterval = _beatInterval * 0.82 + (time - _lastBeatTime) * 0.18;
+      }
+      _lastBeatTime = time;
+      beatCooldownSec = Math.max(0.10, _beatInterval * 0.38);
+      // Phase nudge: small jolt in the breathing cycle — creates a visual "heartbeat" shudder
+      _breathePhase  += 0.20;
+      _breathe2Phase += 0.32;
+      // Orbital tilt jolt — retained for the optional ring group.
+      orbitGroup.rotation.x += 0.10;
+      _orbitSpinBoost = 1.0;
+      // Strike the tuning fork: ring amplitude scales with hit strength
+      _ringAmp = Math.min((0.04 + beatStrength * 0.045) * VIZ.ring, 0.20);
+      _ringPhase = 0;
     }
-    _lastBeatTime = time;
-    beatCooldown = Math.max(6, Math.round(_beatInterval * 60 * 0.38));
-    // Phase nudge: small jolt in the breathing cycle — creates a visual "heartbeat" shudder
-    _breathePhase  += 0.20;
-    _breathe2Phase += 0.32;
-    // Orbital tilt jolt — rings tip toward viewer on each beat, spring back via lerp
-    orbitGroup.rotation.x += 0.10;
-    _orbitSpinBoost = 1.0;
-    // Strike the tuning fork: ring amplitude scales with hit strength
-    _ringAmp = Math.min((0.04 + beatStrength * 0.045) * VIZ.ring, 0.20);
-    _ringPhase = 0;
-    // Shockwave rings removed per user request — the radius ring IS the beat cue.
-    pendingShockwave2 = 0;
+    _prevBassFlux = bassFluxLevel;
   }
-  if (pendingShockwave2 > 0) pendingShockwave2 = 0;
-  prevBass    = bassLevel;
-  _prevBassFlux = bassFluxLevel;
-  beatFlash     *= 0.88; // slower decay → more sustained beat punch (was 0.82)
-  spherePulse   *= 0.90;
-  _beatShake    *= 0.75;
-  _beatHueBurst *= 0.84;
+  beatFlash     *= retainFrom60Hz(0.88, frame60);
+  spherePulse   *= retainFrom60Hz(0.90, frame60);
+  _beatShake    *= retainFrom60Hz(0.75, frame60);
+  _beatHueBurst *= retainFrom60Hz(0.84, frame60);
 
   // ── Core sphere — idle breathing + audio reactivity ───────────────
   // Integrated phase so rate change is seamless (no jump when audio energy changes)
@@ -2997,9 +3491,9 @@ function animate() {
   // Amplitude grows slightly with audio energy — sphere breathes deeper during music
   const _bAmp = 0.055 + _sAudio * 0.022;
   const _breathe = Math.sin(_breathePhase) * _bAmp + Math.sin(_breathe2Phase) * (_bAmp * 0.51);
-  sphere.rotation.y += 0.0015 + midLevel * 0.008 + spherePulse * 0.010;
-  sphere.rotation.x += 0.0005 + midLevel * 0.003 + spherePulse * 0.004;
-  sphere.rotation.z += Math.sin(time * 0.9) * 0.0002 + highLevel * 0.002;
+  sphere.rotation.y += (0.0015 + midLevel * 0.008 + spherePulse * 0.010) * frame60;
+  sphere.rotation.x += (0.0005 + midLevel * 0.003 + spherePulse * 0.004) * frame60;
+  sphere.rotation.z += (Math.sin(time * 0.9) * 0.0002 + highLevel * 0.002) * frame60;
   // Radius follows the EQ band levels 1:1 — same variables the mini bars
   // render, so bar big = swing big, bar small = swing small. Uniform scale
   // on all axes keeps the silhouette a perfect circle.
@@ -3026,6 +3520,16 @@ function animate() {
   _sHigh  += (highLevel  - _sHigh)  * (highLevel  > _sHigh  ? _sfAtkHigh  : _sfRelHigh);
   _sAudio += (audioLevel - _sAudio) * (audioLevel > _sAudio ? _sfAtkAudio : _sfRelAudio);
 
+  updateMixTheme(delta, frame60);
+
+  // A single rAF owns both visual modes. Liquid mode skips the entire hidden
+  // Three.js scene update instead of doing duplicate work behind its canvas.
+  if (state.visualMode === 'liquidAura') {
+    _renderLiquidAura(delta);
+    perfMonitor.endFrame(renderer);
+    return;
+  }
+
   sphereMat.uniforms.uTime.value       = time;
   // Breathing modulates perceived audio level slightly — sphere feels more alive
   sphereMat.uniforms.uAudioLevel.value = _sAudio * 0.85 + Math.sin(_breathePhase) * 0.028;
@@ -3037,24 +3541,6 @@ function animate() {
   sphereMat.uniforms.uBeatFlash.value  = beatFlash;
   sphereMat.uniforms.uFlux.value       = fluxLevel * 0.95;
   sphereMat.uniforms.uSpikeMul.value   = VIZ.spike;
-
-  // Mix theme — hue cycles through full spectrum, speed follows audio energy
-  if (state.theme === 'mix') {
-    _mixHue = (_mixHue + 0.00018 + _sAudio * 0.0007) % 1.0;
-    _tColor1.setHSL(_mixHue, 0.90, 0.12);
-    _tColor2.setHSL(_mixHue, 1.00, 0.50);
-    if (++_mixCssFrame % 18 === 0) {
-      const a = new THREE.Color().setHSL(_mixHue, 1.0, 0.56);
-      const b = new THREE.Color().setHSL((_mixHue + 0.08) % 1.0, 0.9, 0.68);
-      const html = document.documentElement;
-      html.style.setProperty('--accent',  '#' + a.getHexString());
-      html.style.setProperty('--accent2', '#' + b.getHexString());
-      const mr = Math.round(a.r * 255), mg = Math.round(a.g * 255), mb = Math.round(a.b * 255);
-      html.style.setProperty('--accent-glow', `rgba(${mr},${mg},${mb},0.22)`);
-      applyEnvColor(a);
-      updateLiquidAccent(a);
-    }
-  }
 
   // Smooth color transition toward target (~1.8s time constant)
   const _cf = 1.0 - Math.exp(-delta / 1.8);
@@ -3083,8 +3569,9 @@ function animate() {
   // Glow drifts toward orb-violet tinted with theme accent — subtle theme feedback on rim
   const _themeRimBlend = Math.min(0.12 + _sAudio * 0.12 + beatFlash * 0.10, 0.28);
   _glowTarget.copy(sphereMat.uniforms.uColor2.value).lerp(_themeAccentColor, _themeRimBlend);
-  coreMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
-  haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
+  const glowColorAlpha = alphaFrom60Hz(0.04, frame60);
+  coreMat.uniforms.uGlowColor.value.lerp(_glowTarget, glowColorAlpha);
+  haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, glowColorAlpha);
   coreSphere.scale.setScalar(coreScale);
   // Glow layers breathe with audio — expand outward on bass/beat for dynamic halo
   glowSphere1.scale.setScalar(1.008 + _sBass * 0.025 + beatFlash * 0.040);
@@ -3096,40 +3583,51 @@ function animate() {
   glowSphere2.rotation.z = Math.cos(time * 0.08 + 0.7) * 0.07;
 
   // ── Orbit rings — slow, readable motion with bass pulse ─────────────
-  _orbitSpinBoost *= 0.88;
-  orbitGroup.rotation.y += 0.0012 + midLevel * 0.0035 + _sBass * 0.0020 + _orbitSpinBoost * 0.008;
-  orbitGroup.rotation.z -= 0.00045 + highLevel * 0.0012 + _sBass * 0.0008;
-  // Bass makes the orbit group tilt on X — rings lean and rock with low-end hits
-  orbitGroup.rotation.x += (_sBass * 0.12 - orbitGroup.rotation.x) * Math.min(delta * 2.5, 0.12);
-  orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055 + ring * 0.35 * VIZ.scene);
-  orbitRings.forEach((ring, i) => {
-    // Inner ring (i=0) spins harder on beat — closest to sphere, most reactive
-    const ringSpinBoost = i === 0 ? spherePulse * 0.010 : spherePulse * 0.004 / (i + 1);
-    const spinDir = i % 2 === 0 ? 1 : -1; // alternating rings counter-rotate for depth
-    ring.rotation.z += spinDir * (i + 1) * (0.0004 + midLevel * 0.0012) + ringSpinBoost;
-    ring.scale.setScalar(1.0 + beatFlash * (0.04 + i * 0.008) + _sMid * 0.016);
-    // Independent slow tilt sway per ring + beat snap
-    ring.rotation.x += Math.sin(time * (0.13 + i * 0.06)) * 0.0006
-                    + bassLevel * 0.005 * Math.sin(time * (0.55 + i * 0.4))
-                    + spherePulse * 0.018 * (i % 2 === 0 ? 1 : -1);
-    ring.rotation.y += Math.cos(time * (0.09 + i * 0.05)) * 0.0003;
-    ring.material.opacity = Math.min(
-      ring.userData.baseOpacity * (1.0 + audioLevel * 2.0 + beatFlash * 3.0),
-      0.92
-    );
-    // Alternate between uColor1 and uColor2 per ring for visual contrast
-    const _rc = i % 2 === 0 ? sphereMat.uniforms.uColor2.value : sphereMat.uniforms.uColor1.value;
-    _rc.getHSL(_hslScratch);
-    ring.material.color.setHSL((_hslScratch.h + i * 0.04) % 1.0, Math.min(_hslScratch.s * 1.1, 1.0), Math.min(_hslScratch.l * 1.2 + 0.10, 0.90));
-  });
+  _orbitSpinBoost *= retainFrom60Hz(0.88, frame60);
+  if (orbitGroup.parent && orbitGroup.visible) {
+    orbitGroup.rotation.y += (0.0012 + midLevel * 0.0035 + _sBass * 0.0020 + _orbitSpinBoost * 0.008) * frame60;
+    orbitGroup.rotation.z -= (0.00045 + highLevel * 0.0012 + _sBass * 0.0008) * frame60;
+    // Bass makes the orbit group tilt on X — rings lean and rock with low-end hits
+    orbitGroup.rotation.x += (_sBass * 0.12 - orbitGroup.rotation.x) * Math.min(delta * 2.5, 0.12);
+    orbitGroup.scale.setScalar(1.0 + _sBass * 0.050 + spherePulse * 0.055 + ring * 0.35 * VIZ.scene);
+    for (let i = 0; i < orbitRings.length; i++) {
+      const orbitRing = orbitRings[i];
+      // Inner ring (i=0) spins harder on beat — closest to sphere, most reactive
+      const ringSpinBoost = i === 0 ? spherePulse * 0.010 : spherePulse * 0.004 / (i + 1);
+      const spinDir = i % 2 === 0 ? 1 : -1; // alternating rings counter-rotate for depth
+      orbitRing.rotation.z += (spinDir * (i + 1) * (0.0004 + midLevel * 0.0012) + ringSpinBoost) * frame60;
+      orbitRing.scale.setScalar(1.0 + beatFlash * (0.04 + i * 0.008) + _sMid * 0.016);
+      // Independent slow tilt sway per ring + beat snap
+      orbitRing.rotation.x += (
+        Math.sin(time * (0.13 + i * 0.06)) * 0.0006 +
+        bassLevel * 0.005 * Math.sin(time * (0.55 + i * 0.4)) +
+        spherePulse * 0.018 * (i % 2 === 0 ? 1 : -1)
+      ) * frame60;
+      orbitRing.rotation.y += Math.cos(time * (0.09 + i * 0.05)) * 0.0003 * frame60;
+      orbitRing.material.opacity = Math.min(
+        orbitRing.userData.baseOpacity * (1.0 + audioLevel * 2.0 + beatFlash * 3.0),
+        0.92
+      );
+      // Alternate between uColor1 and uColor2 per ring for visual contrast
+      const ringColor = i % 2 === 0 ? sphereMat.uniforms.uColor2.value : sphereMat.uniforms.uColor1.value;
+      ringColor.getHSL(_hslScratch);
+      orbitRing.material.color.setHSL(
+        (_hslScratch.h + i * 0.04) % 1.0,
+        Math.min(_hslScratch.s * 1.1, 1.0),
+        Math.min(_hslScratch.l * 1.2 + 0.10, 0.90),
+      );
+    }
+  }
 
   // ── Audio comets — slanted 3D satellites with bass-reactive trails ───────
-  cometGroup.rotation.y += 0.0010 + _sMid * 0.0025 + spherePulse * 0.006;
-  cometGroup.rotation.x = 0.24 + Math.sin(time * 0.20) * 0.08 + _sBass * 0.08;
-  cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045 + ring * 0.3 * VIZ.scene);
-  _cometColor.copy(sphereMat.uniforms.uColor2.value);
-  _cometColor.getHSL(_hslScratch);
-  audioComets.forEach((comet, i) => {
+  if (cometGroup.parent && cometGroup.visible) {
+    cometGroup.rotation.y += (0.0010 + _sMid * 0.0025 + spherePulse * 0.006) * frame60;
+    cometGroup.rotation.x = 0.24 + Math.sin(time * 0.20) * 0.08 + _sBass * 0.08;
+    cometGroup.scale.setScalar(1.0 + _sBass * 0.035 + beatFlash * 0.045 + ring * 0.3 * VIZ.scene);
+    _cometColor.copy(sphereMat.uniforms.uColor2.value);
+    _cometColor.getHSL(_hslScratch);
+    for (let i = 0; i < audioComets.length; i++) {
+      const comet = audioComets[i];
     const speed = comet.speed + _sBass * 0.75 + beatFlash * 0.65;
     const phase = time * speed + comet.phase + spherePulse * 0.35;
     const radialWobble = Math.sin(time * (0.73 + i * 0.09) + comet.phase) * (0.035 + _sMid * 0.025);
@@ -3158,18 +3656,19 @@ function animate() {
     const cometLight = Math.min(_hslScratch.l * 1.15 + 0.16 + beatFlash * 0.10, 0.92);
     comet.headMat.color.setHSL(hueShift, Math.min(_hslScratch.s * 1.15, 1.0), cometLight);
     comet.tail.material.color.copy(comet.headMat.color);
-    comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62);
-  });
+      comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62);
+    }
+  }
 
   // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
   sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene;
-  sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, 0.04);
+  sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, alphaFrom60Hz(0.04, frame60));
 
   // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
   for (let i = shockwaves.length - 1; i >= 0; i--) {
     const sw = shockwaves[i];
-    sw.age++;
-    const p = sw.age / sw.maxAge;
+    sw.ageSec += delta;
+    const p = Math.min(sw.ageSec / sw.maxAgeSec, 1);
     // Primary: ease-out (fast start, slow end); secondary: ease-in-out (graceful trail)
     const eased = sw.secondary
       ? p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
@@ -3177,7 +3676,7 @@ function animate() {
     const maxExpand = sw.secondary ? 1.2 : 1.8;
     sw.mesh.scale.setScalar(1.0 + eased * maxExpand);
     sw.mat.opacity = (sw.secondary ? 0.75 : 1.00) * Math.pow(1.0 - p, sw.secondary ? 1.1 : 1.3);
-    if (sw.age >= sw.maxAge) {
+    if (sw.ageSec >= sw.maxAgeSec) {
       scene.remove(sw.mesh);
       sw.geo.dispose();
       sw.mat.dispose();
@@ -3186,27 +3685,27 @@ function animate() {
   }
 
   // ── Background particles — very faint depth cue, only flicker on loud peaks ──
-  particles.rotation.y -= 0.00015 + brightnessLevel * 0.0012 + spherePulse * 0.0030;
-  particles.rotation.x += 0.00005 + brightnessLevel * 0.0004;
-  particles.rotation.z += 0.00008 + _sAudio * 0.0004;
+  particles.rotation.y -= (0.00015 + brightnessLevel * 0.0012 + spherePulse * 0.0030) * frame60;
+  particles.rotation.x += (0.00005 + brightnessLevel * 0.0004) * frame60;
+  particles.rotation.z += (0.00008 + _sAudio * 0.0004) * frame60;
   particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10);
   particleMat.size    = 0.014 + _sBass * 0.010 + beatFlash * 0.008;
   particles.scale.setScalar(1.0 + _sBass * 0.04 + beatFlash * 0.06);
   // color stays fixed muted-purple — no lerp toward theme color
 
   // ── Near-sphere halo — subtle orbital dust, barely visible at idle ──
-  haloParticles.rotation.y += 0.0008 + midLevel * 0.004 + _sBass * 0.012 + spherePulse * 0.025 + beatFlash * 0.045;
-  haloParticles.rotation.x -= 0.0003 + highLevel * 0.002 + _sBass * 0.006;
-  haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004;
+  haloParticles.rotation.y += (0.0008 + midLevel * 0.004 + _sBass * 0.012 + spherePulse * 0.025 + beatFlash * 0.045) * frame60;
+  haloParticles.rotation.x -= (0.0003 + highLevel * 0.002 + _sBass * 0.006) * frame60;
+  haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004 * frame60;
   haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
   haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
   haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.4 * VIZ.scene);
   // color stays fixed muted-purple — no lerp toward theme color
 
   // ── Nebula swarm — slow drift + uScale sync for correct point-size attenuation ──
-  nebulaSwarm.rotation.y += 0.00040 + _sBass * 0.0009 + beatFlash * 0.002;
+  nebulaSwarm.rotation.y += (0.00040 + _sBass * 0.0009 + beatFlash * 0.002) * frame60;
   nebulaSwarm.scale.setScalar(1.0 + _sBass * 0.03 + beatFlash * 0.05 + ring * 0.25 * VIZ.scene);
-  nebulaSwarm.rotation.x += Math.sin(time * 0.19) * 0.00015;
+  nebulaSwarm.rotation.x += Math.sin(time * 0.19) * 0.00015 * frame60;
   nebulaMat.uniforms.uScale.value = renderer.domElement.height * 0.5;
 
   // ── User-selectable 3D rhythm modes ───────────────────────────────
@@ -3217,7 +3716,7 @@ function animate() {
 
   if (waveActive) {
     const waveColor = sphereMat.uniforms.uColor2.value;
-    waveMat.color.lerp(waveColor, 0.05);
+    waveMat.color.lerp(waveColor, alphaFrom60Hz(0.05, frame60));
     waveMat.opacity = Math.min(0.22 + _sAudio * 0.28 + beatFlash * 0.28, 0.72);
     waveMat.size = 0.020 + _sHigh * 0.020 + beatFlash * 0.012;
     for (let i = 0; i < waveCount; i++) {
@@ -3232,12 +3731,12 @@ function animate() {
       wavePos[i * 3 + 2] = z + Math.cos(time * 0.38 + x) * 0.025;
     }
     waveGeo.attributes.position.needsUpdate = true;
-    waveField.rotation.y += 0.0007 + _sBass * 0.0015;
+    waveField.rotation.y += (0.0007 + _sBass * 0.0015) * frame60;
   }
 
   if (barsActive) {
     const binCount = dataArray?.length || 0;
-    barMat.color.lerp(sphereMat.uniforms.uColor2.value, 0.05);
+    barMat.color.lerp(sphereMat.uniforms.uColor2.value, alphaFrom60Hz(0.05, frame60));
     barMat.opacity = Math.min(0.24 + _sAudio * 0.34 + beatFlash * 0.28, 0.78);
     for (let i = 0; i < barCount; i++) {
       const t = i / barCount;
@@ -3259,35 +3758,13 @@ function animate() {
     spectrumBars.rotation.y = Math.sin(time * 0.20) * 0.10;
   }
 
-  // ── Planet pulse UI (12fps is enough, keeps layout work low) ─────────
-  // ── Ambient bloom — colored radial glow behind sphere, pulses with bass ──
-  if (time - lastBgGlow > 0.05) {
+  // ── Ambient bloom UI (12fps; only compositor opacity/scale writes) ──
+  if (ambientBloomEl && time - lastBgGlow > 1 / 12) {
     lastBgGlow = time;
-    const gc1 = sphereMat.uniforms.uColor1.value;
-    const gc2 = sphereMat.uniforms.uColor2.value;
-    const gcMix = Math.min(0.70 + beatFlash * 0.22, 0.92);
-    const r = Math.round((gc2.r * gcMix + gc1.r * (1 - gcMix)) * 255);
-    const g = Math.round((gc2.g * gcMix + gc1.g * (1 - gcMix)) * 255);
-    const b = Math.round((gc2.b * gcMix + gc1.b * (1 - gcMix)) * 255);
-    const strength = _sBass * 0.22 + beatFlash * 0.40;
-    // Bloom size pulses with bass for a breathing effect
-    const bw = (40 + _sBass * 20 + beatFlash * 28).toFixed(1);
-    const bh = (34 + _sBass * 16 + beatFlash * 22).toFixed(1);
-    // Second bloom layer uses uColor1 for depth — slightly offset up for painterly feel
-    const r1 = Math.round(gc1.r * 255), g1 = Math.round(gc1.g * 255), b1 = Math.round(gc1.b * 255);
-    const str2 = (_sMid * 0.12 + beatFlash * 0.20).toFixed(3);
-    bgGradientEl.style.background =
-      `radial-gradient(ellipse ${bw}% ${bh}% at 50% 50%, rgba(${r},${g},${b},${strength.toFixed(3)}) 0%, transparent 68%),` +
-      `radial-gradient(ellipse 38% 30% at 52% 44%, rgba(${r1},${g1},${b1},${str2}) 0%, transparent 55%),` +
-      `radial-gradient(ellipse 72% 62% at 50% 50%, transparent 28%, rgba(0,0,0,0.52) 100%)`;
-
-    // Beat-reactive album art glow
-    const _artWrap = document.getElementById('right-art-wrap');
-    if (_artWrap) {
-      const _gSz = (55 + beatFlash * 90 + _sBass * 45).toFixed(1);
-      const _gAl = (0.15 + beatFlash * 0.50 + _sBass * 0.22).toFixed(3);
-      _artWrap.style.boxShadow = `0 20px 60px rgba(0,0,0,0.65),0 0 0 1px rgba(255,255,255,0.08),0 0 ${_gSz}px rgba(${r},${g},${b},${_gAl})`;
-    }
+    const bloomOpacity = Math.min(0.08 + _sBass * 0.18 + beatFlash * 0.30, 0.54);
+    const bloomScale = 0.92 + _sBass * 0.18 + beatFlash * 0.24;
+    ambientBloomEl.style.setProperty('--ambient-opacity', bloomOpacity.toFixed(3));
+    ambientBloomEl.style.setProperty('--ambient-scale', bloomScale.toFixed(3));
   }
 
   if (time - lastMetricsUi > 0.08) {
@@ -3312,13 +3789,32 @@ function animate() {
   camera.lookAt(Math.sin(time * 0.17) * 0.03, -0.40 + _sBass * 0.06, -1.5);
   // Cinematic beat punch: briefly zoom in on beat, springs back as spherePulse decays
   const _targetFov = 45.0 - spherePulse * 1.0 - _sBass * 0.3;
-  camera.fov += (_targetFov - camera.fov) * 0.12;
+  camera.fov += (_targetFov - camera.fov) * alphaFrom60Hz(0.12, frame60);
   camera.updateProjectionMatrix();
 
-  if (state.visualMode !== 'liquidAura') renderer.render(scene, camera);
+  renderer.render(scene, camera);
+  perfMonitor.endFrame(renderer);
 }
 
-animate();
+function startAnimationLoop() {
+  if (animationFrameId || document.hidden) return;
+  clock.getDelta();
+  audioSampleAccumulator = AUDIO_SAMPLE_INTERVAL;
+  perfMonitor.resetTimestamp();
+  animationFrameId = requestAnimationFrame(animate);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    animationFrameId = 0;
+    perfMonitor.resetTimestamp();
+    return;
+  }
+  startAnimationLoop();
+});
+
+startAnimationLoop();
 
 // ===================================================================
 // COLOR EXTRACTION FROM ALBUM ART
@@ -3417,23 +3913,40 @@ function cleanCookieString(raw) {
   }, []).join('; ');
 }
 
-async function api(path) {
+async function api(path, {
+  includeSession = true,
+  timeoutMs = 8000,
+  signal = null,
+  sessionOverride = undefined,
+} = {}) {
   const sep = path.includes('?') ? '&' : '?';
-  const cookieParam = sessionCookie
-    ? `${sep}cookie=${encodeURIComponent(sessionCookie)}`
+  const effectiveSession = sessionOverride === undefined
+    ? sessionCookie
+    : sessionOverride;
+  const cookieParam = includeSession && effectiveSession
+    ? `${sep}cookie=${encodeURIComponent(effectiveSession)}`
     : '';
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const requestSignal = signal && typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([signal, timeoutSignal])
+    : (signal || timeoutSignal);
   const res = await fetch(API + path + cookieParam, {
     // Login state is forwarded explicitly in cookieParam. Avoid ambient cookies so
     // the local API can keep a strict, predictable cross-origin boundary.
     credentials: 'omit',
-    signal: AbortSignal.timeout(8000),
+    signal: requestSignal,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 async function searchSongs(q) {
-  const data = await api(`/search?keywords=${encodeURIComponent(q)}&limit=30&type=1`);
+  // Search is public. Omitting the session cookie avoids an occasionally much
+  // slower upstream code path while authenticated playback remains unchanged.
+  const data = await api(`/search?keywords=${encodeURIComponent(q)}&limit=60&type=1`, {
+    includeSession: false,
+    timeoutMs: 12000,
+  });
   return data.result?.songs || [];
 }
 
@@ -3486,6 +3999,80 @@ function parseLRC(lrc) {
 // ===================================================================
 // LYRIC SYNC
 // ===================================================================
+let lyricScrollFrame = 0;
+let lyricScrollSerial = 0;
+let lyricsManualUntil = 0;
+const lyricsWrapElement = document.getElementById('lyrics-wrap');
+
+function cssCustomTimeMs(name, fallbackMs) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!value) return fallbackMs;
+  if (value.endsWith('ms')) return Number.parseFloat(value);
+  if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
+  return fallbackMs;
+}
+
+function cancelLyricScroll() {
+  lyricScrollSerial++;
+  if (lyricScrollFrame) cancelAnimationFrame(lyricScrollFrame);
+  lyricScrollFrame = 0;
+}
+
+function scrollLyricIntoView(line) {
+  if (!line || performance.now() < lyricsManualUntil) return;
+  cancelLyricScroll();
+  const wrap = lyricsWrapElement;
+  const maxScrollTop = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+  const target = Math.max(
+    0,
+    Math.min(maxScrollTop, line.offsetTop - (wrap.clientHeight - line.offsetHeight) / 2),
+  );
+  const start = wrap.scrollTop;
+  const distance = target - start;
+  const duration = cssCustomTimeMs('--motion-scroll', 420);
+
+  if (prefersReducedMotion() || duration <= 0 || Math.abs(distance) < 1) {
+    wrap.scrollTop = target;
+    return;
+  }
+
+  const serial = ++lyricScrollSerial;
+  const startedAt = performance.now();
+  const step = now => {
+    if (serial !== lyricScrollSerial) return;
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - Math.pow(1 - progress, 4);
+    wrap.scrollTop = start + distance * eased;
+    if (progress < 1) {
+      lyricScrollFrame = requestAnimationFrame(step);
+    } else {
+      lyricScrollFrame = 0;
+    }
+  };
+  lyricScrollFrame = requestAnimationFrame(step);
+}
+
+function animateLyricsEntrance() {
+  lyricsWrapElement.getAnimations().forEach(animation => animation.cancel());
+  if (prefersReducedMotion()) return;
+  lyricsWrapElement.animate([
+    { opacity: 0.28, transform: 'translate3d(0, 8px, 0)' },
+    { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+  ], {
+    duration: cssCustomTimeMs('--motion-normal', 260),
+    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+  });
+}
+
+lyricsWrapElement.addEventListener('wheel', () => {
+  cancelLyricScroll();
+  lyricsManualUntil = performance.now() + 4500;
+}, { passive: true });
+lyricsWrapElement.addEventListener('pointerdown', () => {
+  cancelLyricScroll();
+  lyricsManualUntil = performance.now() + 4500;
+}, { passive: true });
+
 function syncLyrics() {
   if (!state.lyrics.length) return;
   const t = audio.currentTime;
@@ -3507,45 +4094,70 @@ function renderLyricHighlight(activeIdx) {
     el.classList.toggle('near', dist === 1 || dist === 2);
   });
   if (activeIdx >= 0 && lines[activeIdx]) {
-    lines[activeIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    scrollLyricIntoView(lines[activeIdx]);
   }
 }
 
 function renderLyrics(lyrics, transMap = new Map()) {
   const wrap = document.getElementById('lyrics-wrap');
+  cancelLyricScroll();
+  lyricsManualUntil = 0;
   if (!lyrics.length) {
     wrap.innerHTML = '<div id="no-lyrics">暂无歌词</div>';
+    animateLyricsEntrance();
     return;
   }
   wrap.innerHTML = '';
   lyrics.forEach((line) => {
     const div = document.createElement('div');
     div.className = 'lyric-line';
+    div.tabIndex = 0;
+    div.setAttribute('role', 'button');
+    div.setAttribute('aria-label', `跳转到 ${formatTime(line.time)}：${line.text}`);
     const trans = transMap.get(line.time);
-    div.innerHTML = `<div>${escHtml(line.text)}</div>${trans ? `<div class="lyric-trans">${escHtml(trans)}</div>` : ''}`;
-    div.addEventListener('click', () => { audio.currentTime = line.time; });
+    div.innerHTML = `<div class="lyric-original">${escHtml(line.text)}</div>${trans ? `<div class="lyric-trans">${escHtml(trans)}</div>` : ''}`;
+    const seekToLine = () => {
+      lyricsManualUntil = 0;
+      audio.currentTime = line.time;
+    };
+    div.addEventListener('click', seekToLine);
+    div.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.code !== 'Space') return;
+      event.preventDefault();
+      seekToLine();
+    });
     wrap.appendChild(div);
   });
+  animateLyricsEntrance();
 }
 
 // ===================================================================
-// PLAYLIST RENDER
+// SEARCH RESULT RENDER
 // ===================================================================
-function renderPlaylist(songs, labelText = '搜索结果') {
+function renderSearchResults(groups, query) {
   const wrap = document.getElementById('playlist-wrap');
-  if (!songs.length) {
-    wrap.innerHTML = '<div id="status-msg">没有找到结果</div>';
+  if (!groups.length) {
+    wrap.innerHTML = `<div id="empty-state"><span>当前筛选下没有结果</span></div>`;
     return;
   }
   wrap.innerHTML = '';
+  wrap.classList.add('motion-list-enter');
+  const displaySongs = groups.map(group => group.song);
 
-  // Section label
-  const label = document.createElement('div');
-  label.className = 'section-label';
-  label.textContent = labelText;
-  wrap.appendChild(label);
+  const duplicateCount = groups.reduce((sum, group) => sum + group.duplicateCount, 0);
+  const summary = document.createElement('div');
+  summary.className = 'search-result-summary';
+  summary.innerHTML = `
+    <span><strong>${groups.length}</strong> 个结果</span>
+    ${duplicateCount
+      ? `<span>已收拢 ${duplicateCount} 个重复音源</span>`
+      : `<span>${escHtml(query)}</span>`}
+  `;
+  wrap.appendChild(summary);
 
-  songs.forEach((song, i) => {
+  const fragment = document.createDocumentFragment();
+  groups.forEach((group, i) => {
+    const song = group.song;
     const artistStr = Array.isArray(song.artists)
       ? song.artists.map(a => a.name).join(' / ')
       : (song.ar ? song.ar.map(a => a.name).join(' / ') : '未知歌手');
@@ -3557,8 +4169,10 @@ function renderPlaylist(songs, labelText = '搜索结果') {
     const picUrl = song.al?.picUrl || song.album?.picUrl || '';
 
     const div = document.createElement('div');
-    div.className = 'song-item';
+    div.className = `song-item${group.playable ? '' : ' unplayable'}`;
     div.dataset.idx = i;
+    div.dataset.songId = song.id;
+    div.style.setProperty('--motion-order', String(Math.min(i, 8)));
 
     // Thumbnail
     let thumbHtml;
@@ -3569,23 +4183,37 @@ function renderPlaylist(songs, labelText = '搜索结果') {
       thumbHtml = `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
     }
 
-    const fee = song.fee ?? 0;
-    const unplayable = fee > 0 && !sessionCookie;
-    const vipBadge = unplayable ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
-    if (unplayable) div.classList.add('unplayable');
-    div.dataset.songId = song.id;
+    const vipBadge = group.playable ? '' : `<span class="vip-badge" title="当前账号不可播放">🔒</span>`;
+    const variantBadge = group.variant.isOriginal
+      ? ''
+      : `<span class="song-badge variant">${escHtml(group.variant.label)}</span>`;
+    const collaborationBadge = group.isCollaboration
+      ? `<span class="song-badge">合作</span>`
+      : '';
+    const sourcesBadge = group.duplicateCount
+      ? `<span class="song-badge sources" title="已合并 ${group.sourceCount} 个相近音源">+${group.duplicateCount} 音源</span>`
+      : '';
     div.innerHTML = `
       ${thumbHtml}
       <div class="song-info">
-        <div class="song-name">${escHtml(song.name)}${vipBadge}</div>
+        <div class="song-name-row">
+          <div class="song-name">${escHtml(song.name)}${vipBadge}</div>
+          ${variantBadge}${collaborationBadge}${sourcesBadge}
+        </div>
         <div class="song-artist">${escHtml(artistStr)}</div>
       </div>
       <div class="eq-icon"><span></span><span></span><span></span></div>
       ${dur ? `<div class="song-dur">${dur}</div>` : ''}
     `;
-    bindSongItem(div, song, () => playFromBrowse(songs, i));
-    wrap.appendChild(div);
+    div.setAttribute(
+      'aria-label',
+      `${song.name}，${artistStr}${group.variant.isOriginal ? '' : `，${group.variant.label}`}${dur ? `，${dur}` : ''}`,
+    );
+    bindSongItem(div, song, () => playFromBrowse(displaySongs, i));
+    fragment.appendChild(div);
   });
+  wrap.appendChild(fragment);
+  updatePlaylistActive(state.currentIndex);
 }
 
 function updatePlaylistActive(idx) {
@@ -3618,6 +4246,37 @@ function playFromBrowse(songsArray, idx) {
   playIndex(idx);
 }
 
+function refreshQueueAfterMutation() {
+  _shuffleHistory = [];
+  saveResume();
+  if (!document.getElementById('queue-panel').classList.contains('hidden')) {
+    renderQueue();
+  }
+  updatePlaylistActive(state.currentIndex);
+}
+
+function commitQueueInsert(result) {
+  state.playlist = result.queue;
+  state.currentIndex = result.currentIndex;
+  refreshQueueAfterMutation();
+  showToast(result.copy.confirmation, {
+    actionLabel: result.copy.undoLabel,
+    durationMs: 6000,
+    onAction: () => {
+      const undo = undoQueueAction({
+        queue: state.playlist,
+        currentIndex: state.currentIndex,
+      }, result.action);
+      if (undo.changed) {
+        state.playlist = undo.queue;
+        state.currentIndex = undo.currentIndex;
+        refreshQueueAfterMutation();
+      }
+      showToast(undo.copy);
+    },
+  });
+}
+
 // Insert a single song right after the currently-playing one, without
 // disturbing playback. If the queue is empty, it just starts playing.
 function enqueueNext(song) {
@@ -3627,10 +4286,10 @@ function enqueueNext(song) {
     playIndex(0);
     return;
   }
-  state.playlist.splice(state.currentIndex + 1, 0, song);
-  saveResume();
-  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
-  showToast(`已设为下一首：${song.name || ''}`);
+  commitQueueInsert(insertQueueNext({
+    queue: state.playlist,
+    currentIndex: state.currentIndex,
+  }, song));
 }
 
 // Append a song to the end of the queue (or start playing if empty).
@@ -3641,10 +4300,10 @@ function enqueueEnd(song) {
     playIndex(0);
     return;
   }
-  state.playlist.push(song);
-  saveResume();
-  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
-  showToast(`已加入队列：${song.name || ''}`);
+  commitQueueInsert(addToQueueEnd({
+    queue: state.playlist,
+    currentIndex: state.currentIndex,
+  }, song));
 }
 
 // Wire click + keyboard (Enter/Space) + right-click menu onto a song row.
@@ -3707,6 +4366,7 @@ async function playIndex(idx, _skipCount = 0) {
   loading = true;
   state.currentIndex = idx;
   updatePlaylistActive(idx);
+  if (_queueOpen) renderQueue();
 
   const song = state.playlist[idx];
   const songId = song.id;
@@ -3815,25 +4475,45 @@ async function playIndex(idx, _skipCount = 0) {
 // ===================================================================
 // AUDIO EVENTS
 // ===================================================================
-audio.addEventListener('timeupdate', () => {
-  syncLyrics();
+function updatePlayPauseUI(isPlaying = !audio.paused) {
+  const button = document.getElementById('btn-play-pause');
+  const playIcon = document.getElementById('icon-play');
+  const pauseIcon = document.getElementById('icon-pause');
+  playIcon.setAttribute('aria-hidden', String(isPlaying));
+  pauseIcon.setAttribute('aria-hidden', String(!isPlaying));
+  button.setAttribute('aria-pressed', String(isPlaying));
+  button.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
+  button.title = isPlaying ? '暂停' : '播放';
+}
+
+function syncPlaybackTimeUI() {
   const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-  const pct = dur > 0 ? (audio.currentTime / dur) * 100 : 0;
-  document.getElementById('progress-fill').style.width = pct + '%';
   document.getElementById('time-current').textContent = formatTime(audio.currentTime);
   document.getElementById('time-total').textContent = dur > 0 ? formatTime(dur) : '--:--';
+  _progressWrap.setAttribute('aria-valuemax', String(Math.round(dur)));
+  _progressWrap.setAttribute('aria-valuenow', String(Math.round(audio.currentTime)));
+  _progressWrap.setAttribute(
+    'aria-valuetext',
+    `${formatTime(audio.currentTime)} / ${dur > 0 ? formatTime(dur) : '--:--'}`,
+  );
+}
+
+audio.addEventListener('timeupdate', () => {
+  syncLyrics();
+  syncPlaybackTimeUI();
 });
+audio.addEventListener('loadedmetadata', syncPlaybackTimeUI);
+audio.addEventListener('durationchange', syncPlaybackTimeUI);
+audio.addEventListener('emptied', syncPlaybackTimeUI);
 
 audio.addEventListener('play', () => {
-  document.getElementById('icon-play').style.display = 'none';
-  document.getElementById('icon-pause').style.display = '';
+  updatePlayPauseUI(true);
   document.body.classList.add('body-playing');
-  if (audioCtx?.state === 'suspended') audioCtx.resume();
+  resumeAudioContext();
 });
 
 audio.addEventListener('pause', () => {
-  document.getElementById('icon-play').style.display = '';
-  document.getElementById('icon-pause').style.display = 'none';
+  updatePlayPauseUI(false);
   document.body.classList.remove('body-playing');
 });
 
@@ -3926,6 +4606,32 @@ document.getElementById('btn-next').addEventListener('click', () => {
 // ===================================================================
 let _shuffleHistory = [];
 
+function updateShuffleUI() {
+  const button = document.getElementById('btn-shuffle');
+  const enabled = Boolean(state.shuffle);
+  const label = `随机播放：${enabled ? '开' : '关'}`;
+  button.classList.toggle('active', enabled);
+  button.setAttribute('aria-pressed', String(enabled));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+}
+
+function updateRepeatUI() {
+  const button = document.getElementById('btn-repeat');
+  const repeatOne = state.repeat === 2;
+  const labels = ['循环：关', '循环：列表', '循环：单曲'];
+  const label = labels[state.repeat] || labels[0];
+  button.classList.toggle('active', state.repeat > 0);
+  button.classList.toggle('repeat-one', repeatOne);
+  button.setAttribute('aria-pressed', String(state.repeat > 0));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  document.getElementById('icon-repeat-all')
+    .setAttribute('aria-hidden', String(repeatOne));
+  document.getElementById('icon-repeat-one')
+    .setAttribute('aria-hidden', String(!repeatOne));
+}
+
 function getNextIndex() {
   if (!state.playlist.length) return -1;
   if (state.shuffle) {
@@ -3943,20 +4649,14 @@ function getNextIndex() {
 document.getElementById('btn-shuffle').addEventListener('click', () => {
   state.shuffle = !state.shuffle;
   _shuffleHistory = [];
-  document.getElementById('btn-shuffle').classList.toggle('active', state.shuffle);
+  updateShuffleUI();
   showToast(state.shuffle ? '随机播放 开' : '随机播放 关');
   savePrefs();
 });
 
 document.getElementById('btn-repeat').addEventListener('click', () => {
   state.repeat = (state.repeat + 1) % 3;
-  const btn = document.getElementById('btn-repeat');
-  const iconAll = document.getElementById('icon-repeat-all');
-  const iconOne = document.getElementById('icon-repeat-one');
-  btn.classList.toggle('active', state.repeat > 0);
-  btn.classList.toggle('repeat-one', state.repeat === 2);
-  iconAll.style.display = state.repeat === 2 ? 'none' : '';
-  iconOne.style.display = state.repeat === 2 ? '' : 'none';
+  updateRepeatUI();
   const labels = ['循环 关', '列表循环', '单曲循环'];
   showToast(labels[state.repeat]);
   savePrefs();
@@ -3975,6 +4675,7 @@ const THEME_SPHERE = {
   green:   { c1: 0x001f10, c2: 0x00c855 },
   mix:     { c1: 0x0a0000, c2: 0xff5012 },
 };
+let themeTransitionTimer = 0;
 
 // Sync all scene environment colors (glow sphere, rings, particles, light) to the current theme accent color.
 // Call whenever the theme or album art color changes.
@@ -3985,6 +4686,13 @@ const THEME_SPHERE = {
 function applyEnvColor(c2Color) {
   const h = {};
   c2Color.getHSL(h);
+  const ambientR = Math.round(c2Color.r * 255);
+  const ambientG = Math.round(c2Color.g * 255);
+  const ambientB = Math.round(c2Color.b * 255);
+  document.documentElement.style.setProperty(
+    '--ambient-rgb',
+    `${ambientR}, ${ambientG}, ${ambientB}`,
+  );
   // Keep glow color dark so AdditiveBlending layers saturate to theme hue, not white
   const glowL = Math.max(Math.min(h.l * 0.65 + 0.04, 0.30), 0.16);
   const glowCol = new THREE.Color().setHSL(h.h, Math.min(h.s, 1.0), glowL);
@@ -4007,6 +4715,12 @@ function applyEnvColor(c2Color) {
 // 'mix' is left alone here since the render loop already drives _tColor1/_tColor2 continuously for it.
 function applyTheme(name) {
   if (!THEME_SPHERE[name]) name = 'violet';
+  clearTimeout(themeTransitionTimer);
+  document.body.classList.add('theme-is-transitioning');
+  themeTransitionTimer = window.setTimeout(() => {
+    document.body.classList.remove('theme-is-transitioning');
+    themeTransitionTimer = 0;
+  }, cssCustomTimeMs('--motion-theme', 650) + 34);
   state.theme = name;
   const html = document.documentElement;
   html.removeAttribute('data-theme');
@@ -4014,7 +4728,9 @@ function applyTheme(name) {
   html.style.removeProperty('--accent2');
   if (name !== 'orange') html.setAttribute('data-theme', name);
   document.querySelectorAll('.theme-dot').forEach(d => {
-    d.classList.toggle('active', d.dataset.theme === name);
+    const selected = d.dataset.theme === name;
+    d.classList.toggle('active', selected);
+    d.setAttribute('aria-checked', String(selected));
   });
   if (name !== 'mix') {
     const sphereColors = THEME_SPHERE[name] ?? THEME_SPHERE.violet;
@@ -4040,13 +4756,18 @@ const VISUAL_MODE_LABELS = {
   liquidAura: '流光灵韵',
 };
 
+let visualModeTransitionTimer = 0;
+
 function applyVisualMode(mode, silent = false) {
   // wave and bars removed from UI — silently map to planet
   if (mode === 'wave' || mode === 'bars') mode = 'planet';
   if (!VISUAL_MODE_LABELS[mode]) mode = 'planet';
+  const previousMode = state.visualMode;
   state.visualMode = mode;
   document.querySelectorAll('.visual-option').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.visual === mode);
+    const selected = btn.dataset.visual === mode;
+    btn.classList.toggle('active', selected);
+    btn.setAttribute('aria-checked', String(selected));
   });
   const visualBtn = document.getElementById('btn-visual');
   if (visualBtn) {
@@ -4057,10 +4778,16 @@ function applyVisualMode(mode, silent = false) {
   const threeCanvas  = document.getElementById('three-canvas');
   const liquidCanvas = document.getElementById('liquid-canvas');
   const isLiquid = mode === 'liquidAura';
-  if (threeCanvas)  threeCanvas.style.display  = isLiquid ? 'none'  : 'block';
-  if (liquidCanvas) liquidCanvas.style.display = isLiquid ? 'block' : 'none';
-  // Reset liquid frame timer so first frame has zero dt
-  if (isLiquid) _laLastFrameTime = 0;
+  threeCanvas?.classList.toggle('visual-is-active', !isLiquid);
+  liquidCanvas?.classList.toggle('visual-is-active', isLiquid);
+  if (previousMode !== mode) {
+    clearTimeout(visualModeTransitionTimer);
+    document.body.classList.add('visual-is-switching');
+    visualModeTransitionTimer = window.setTimeout(() => {
+      document.body.classList.remove('visual-is-switching');
+      visualModeTransitionTimer = 0;
+    }, cssCustomTimeMs('--motion-view', 340) + 34);
+  }
   if (!silent) showToast(`视觉模式：${VISUAL_MODE_LABELS[mode]}`);
 }
 
@@ -4089,14 +4816,17 @@ function buildTunerPanel() {
     const div = document.createElement('div');
     div.className = 'tuner-row';
     const val = VIZ[row.key];
-    div.innerHTML = `<label>${row.label}</label>
-      <input type="range" min="${row.min}" max="${row.max}" step="${row.step}" value="${val}">
-      <output>${row.fmt(val)}</output>`;
+    const inputId = `tuner-${row.key}`;
+    const outputId = `${inputId}-value`;
+    div.innerHTML = `<label for="${inputId}">${row.label}</label>
+      <input id="${inputId}" type="range" min="${row.min}" max="${row.max}" step="${row.step}" value="${val}" aria-describedby="${outputId}" aria-valuetext="${row.fmt(val)}">
+      <output id="${outputId}" for="${inputId}">${row.fmt(val)}</output>`;
     const input = div.querySelector('input');
     const out = div.querySelector('output');
     input.addEventListener('input', () => {
       VIZ[row.key] = parseFloat(input.value);
       out.textContent = row.fmt(VIZ[row.key]);
+      input.setAttribute('aria-valuetext', out.textContent);
       saveViz();
     });
     panel.appendChild(div);
@@ -4115,16 +4845,12 @@ document.getElementById('btn-tuner').addEventListener('click', (e) => {
   e.stopPropagation();
   const panel = document.getElementById('tuner-panel');
   panel.classList.toggle('hidden');
-  document.getElementById('btn-tuner').classList.toggle('active', !panel.classList.contains('hidden'));
-});
-
-document.addEventListener('click', (e) => {
-  const panel = document.getElementById('tuner-panel');
   const btn = document.getElementById('btn-tuner');
-  if (!panel || panel.classList.contains('hidden')) return;
-  if (panel.contains(e.target) || btn?.contains(e.target)) return;
-  panel.classList.add('hidden');
-  btn?.classList.remove('active');
+  const expanded = !panel.classList.contains('hidden');
+  panel.inert = !expanded;
+  panel.setAttribute('aria-hidden', String(!expanded));
+  btn.classList.toggle('active', expanded);
+  btn.setAttribute('aria-expanded', String(expanded));
 });
 
 document.querySelectorAll('.visual-option').forEach(btn => {
@@ -4143,21 +4869,104 @@ document.addEventListener('click', (e) => {
   panel.classList.add('hidden');
 });
 
+// ── Unified settings popover ───────────────────────────────────────
+const settingsPanel = document.getElementById('settings-panel');
+const settingsButton = document.getElementById('btn-settings');
+let _settingsOpen = false;
+let settingsReturnFocus = null;
+let settingsFocusFrame = 0;
+
+function toggleSettings(show, { returnFocus = true } = {}) {
+  const nextOpen = show !== undefined ? Boolean(show) : !_settingsOpen;
+  if (nextOpen === _settingsOpen) return;
+  _settingsOpen = nextOpen;
+  if (settingsFocusFrame) {
+    cancelAnimationFrame(settingsFocusFrame);
+    settingsFocusFrame = 0;
+  }
+
+  if (nextOpen) {
+    if (typeof toggleQueue === 'function') toggleQueue(false);
+    settingsReturnFocus = document.activeElement;
+    settingsPanel.inert = false;
+    settingsPanel.setAttribute('aria-hidden', 'false');
+    settingsPanel.classList.remove('hidden');
+    settingsButton.classList.add('active');
+    settingsButton.setAttribute('aria-expanded', 'true');
+    settingsFocusFrame = requestAnimationFrame(() => {
+      settingsFocusFrame = 0;
+      if (_settingsOpen && !settingsPanel.inert) {
+        settingsPanel.focus({ preventScroll: true });
+      }
+    });
+  } else {
+    settingsPanel.inert = true;
+    settingsPanel.setAttribute('aria-hidden', 'true');
+    settingsPanel.classList.add('hidden');
+    settingsButton.classList.remove('active');
+    settingsButton.setAttribute('aria-expanded', 'false');
+    if (
+      returnFocus
+      && settingsReturnFocus instanceof HTMLElement
+      && settingsReturnFocus.isConnected
+    ) {
+      settingsReturnFocus.focus({ preventScroll: true });
+    }
+    settingsReturnFocus = null;
+  }
+}
+
+settingsPanel.inert = true;
+settingsPanel.setAttribute('aria-hidden', 'true');
+settingsButton.addEventListener('click', event => {
+  event.stopPropagation();
+  toggleSettings();
+});
+document.getElementById('settings-close').addEventListener('click', () => {
+  toggleSettings(false);
+});
+document.addEventListener('pointerdown', event => {
+  if (!_settingsOpen) return;
+  if (settingsPanel.contains(event.target) || settingsButton.contains(event.target)) return;
+  toggleSettings(false, { returnFocus: false });
+});
+
 // ===================================================================
 // CROSSFADE
 // ===================================================================
 let _cfTimer = null;
+let _cfResolve = null;
+
 function fadeTo(targetVol, durationMs) {
-  clearInterval(_cfTimer);
+  if (_cfTimer) {
+    clearInterval(_cfTimer);
+    _cfTimer = null;
+  }
+  if (_cfResolve) {
+    _cfResolve(false);
+    _cfResolve = null;
+  }
+
   return new Promise(resolve => {
+    _cfResolve = resolve;
     const start = audio.volume;
-    const steps = 20;
-    const stepMs = durationMs / steps;
+    const safeTarget = Math.max(0, Math.min(1, targetVol));
+    const steps = Math.max(1, Math.ceil(Math.max(0, durationMs) / (1000 / 60)));
+    const stepMs = Math.max(1, durationMs / steps);
     let s = 0;
     _cfTimer = setInterval(() => {
       s++;
-      audio.volume = Math.max(0, Math.min(1, start + (targetVol - start) * s / steps));
-      if (s >= steps) { clearInterval(_cfTimer); audio.volume = targetVol; resolve(); }
+      const progress = Math.min(1, s / steps);
+      const eased = progress * progress * (3 - 2 * progress);
+      audio.volume = start + (safeTarget - start) * eased;
+      if (s >= steps) {
+        clearInterval(_cfTimer);
+        _cfTimer = null;
+        audio.volume = safeTarget;
+        const finish = _cfResolve;
+        _cfResolve = null;
+        finish?.(true);
+      }
     }, stepMs);
   });
 }
@@ -4165,6 +4974,17 @@ function fadeTo(targetVol, durationMs) {
 // ===================================================================
 // PERSIST PREFERENCES + RESUME
 // ===================================================================
+function readStoredJson(key, fallback, isValid = () => true) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const parsed = JSON.parse(raw);
+    return isValid(parsed) ? parsed : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function savePrefs() {
   localStorage.setItem('mp_prefs', JSON.stringify({
     shuffle: state.shuffle, repeat: state.repeat,
@@ -4173,22 +4993,27 @@ function savePrefs() {
   }));
 }
 
-const RESUME_QUEUE_CAP = 500;   // keep localStorage well under quota (~100KB at 500 songs)
+const RESUME_QUEUE_CAP = 1000;  // matches the largest playlist request while keeping fields trimmed
 
 function saveResume() {
   if (state.currentIndex < 0 || !state.playlist.length) return;
-  // Persist the whole queue (trimmed fields), not just the current song,
-  // so a restart restores the full playing context with working next/prev.
-  const queue = state.playlist.slice(0, RESUME_QUEUE_CAP).map(s => ({
+  // Keep the active song inside the persisted window even if a manually
+  // extended queue grows beyond the normal 1000-track playlist limit.
+  const queueStart = state.playlist.length > RESUME_QUEUE_CAP
+    ? Math.min(state.currentIndex, state.playlist.length - RESUME_QUEUE_CAP)
+    : 0;
+  const queue = state.playlist
+    .slice(queueStart, queueStart + RESUME_QUEUE_CAP)
+    .map(s => ({
     id: s.id, name: s.name,
     ar: (s.artists || s.ar || []).map(a => ({ name: a.name })),
     al: { picUrl: s.al?.picUrl || s.album?.picUrl || '' },
     dt: s.dt || 0, fee: s.fee || 0,
-  }));
+    }));
   try {
     localStorage.setItem('mp_resume', JSON.stringify({
       queue,
-      idx: Math.min(state.currentIndex, queue.length - 1),
+      idx: Math.min(state.currentIndex - queueStart, queue.length - 1),
       time: Math.floor(audio.currentTime),
     }));
   } catch (_) { /* quota exceeded — skip this save */ }
@@ -4198,10 +5023,14 @@ setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
 
 // Restore on startup
 (function restoreState() {
-  const prefs = JSON.parse(localStorage.getItem('mp_prefs') || 'null');
+  const prefs = readStoredJson(
+    'mp_prefs',
+    null,
+    value => value !== null && typeof value === 'object' && !Array.isArray(value),
+  );
   if (prefs) {
     if (prefs.theme) applyTheme(prefs.theme === 'orange' ? 'violet' : prefs.theme);
-    if (prefs.visualMode) applyVisualMode(prefs.visualMode, true);
+    if (prefs.visualMode) state.visualMode = prefs.visualMode;
     if (typeof prefs.volume === 'number') {
       state.volume = prefs.volume;
       audio.volume = prefs.volume;
@@ -4209,21 +5038,21 @@ setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
     }
     if (prefs.shuffle) {
       state.shuffle = true;
-      document.getElementById('btn-shuffle').classList.add('active');
     }
     if (prefs.repeat) {
       state.repeat = prefs.repeat;
-      const btn = document.getElementById('btn-repeat');
-      btn.classList.add('active');
-      if (prefs.repeat === 2) {
-        btn.classList.add('repeat-one');
-        document.getElementById('icon-repeat-all').style.display = 'none';
-        document.getElementById('icon-repeat-one').style.display = '';
-      }
     }
   }
+  applyVisualMode(state.visualMode, true);
+  updateShuffleUI();
+  updateRepeatUI();
+  updatePlayPauseUI(false);
 
-  const resume = JSON.parse(localStorage.getItem('mp_resume') || 'null');
+  const resume = readStoredJson(
+    'mp_resume',
+    null,
+    value => value !== null && typeof value === 'object' && !Array.isArray(value),
+  );
   // New format: { queue, idx, time }. Old format ({ song, time }) still restores as a 1-song queue.
   const rQueue = resume?.queue?.length ? resume.queue : (resume?.song ? [resume.song] : null);
   if (rQueue) {
@@ -4239,46 +5068,148 @@ setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
   }
 })();
 
-// Progress bar seek (click + drag)
-let _draggingProgress = false;
-function _seekToProgress(clientX) {
-  if (!audio.duration) return;
-  const rect = document.getElementById('progress-bar-wrap').getBoundingClientRect();
-  audio.currentTime = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * audio.duration;
-}
-document.getElementById('progress-bar-wrap').addEventListener('mousedown', (e) => {
-  _draggingProgress = true;
-  _seekToProgress(e.clientX);
-  e.preventDefault();
-});
-document.addEventListener('mousemove', (e) => { if (_draggingProgress) _seekToProgress(e.clientX); });
-document.addEventListener('mouseup', () => { _draggingProgress = false; });
-
-// Progress tooltip
+// Progress bar seek + tooltip. Pointer moves are coalesced to one DOM update
+// per display frame, and the geometry read is cached for the interaction.
 const _progressWrap = document.getElementById('progress-bar-wrap');
 const _progressTooltip = document.getElementById('progress-tooltip');
-_progressWrap.addEventListener('mousemove', (e) => {
-  if (!audio.duration) return;
-  const rect = _progressWrap.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  _progressTooltip.textContent = formatTime(pct * audio.duration);
-  _progressTooltip.style.left = (e.clientX - rect.left) + 'px';
-  _progressTooltip.classList.remove('hidden');
+let _draggingProgress = false;
+var _progressRect = null;
+let _progressPointerFrame = 0;
+let _pendingProgressX = 0;
+let _pendingProgressSeek = false;
+let _progressPointerInside = false;
+let _progressTooltipSecond = -1;
+
+function _cacheProgressRect() {
+  _progressRect = _progressWrap.getBoundingClientRect();
+  return _progressRect;
+}
+
+function _progressRatioAt(clientX) {
+  const rect = _progressRect || _cacheProgressRect();
+  return Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+}
+
+function _applyProgressPointer() {
+  _progressPointerFrame = 0;
+  if (!audio.duration) {
+    _pendingProgressSeek = false;
+    return;
+  }
+  const shouldSeek = _pendingProgressSeek;
+  _pendingProgressSeek = false;
+  const ratio = _progressRatioAt(_pendingProgressX);
+  if (shouldSeek) {
+    audio.currentTime = ratio * audio.duration;
+    playbackProgress.sync();
+  }
+  const rect = _progressRect;
+  const previewSecond = Math.round(ratio * audio.duration);
+  if (previewSecond !== _progressTooltipSecond) {
+    _progressTooltipSecond = previewSecond;
+    _progressTooltip.textContent = formatTime(previewSecond);
+  }
+  _progressTooltip.style.setProperty(
+    '--progress-tooltip-x',
+    `${ratio * rect.width}px`,
+  );
+  _progressTooltip.classList.toggle(
+    'hidden',
+    !_progressPointerInside && !_draggingProgress,
+  );
+  if (!_progressPointerInside && !_draggingProgress) _progressRect = null;
+}
+
+function _queueProgressPointer(clientX, seek = false) {
+  _pendingProgressX = clientX;
+  _pendingProgressSeek = seek;
+  if (!_progressPointerFrame) {
+    _progressPointerFrame = requestAnimationFrame(_applyProgressPointer);
+  }
+}
+
+_progressWrap.addEventListener('pointerdown', event => {
+  if (event.button !== 0 || !audio.duration) return;
+  _progressPointerInside = true;
+  _draggingProgress = true;
+  _cacheProgressRect();
+  _progressWrap.setPointerCapture?.(event.pointerId);
+  _queueProgressPointer(event.clientX, true);
+  event.preventDefault();
 });
-_progressWrap.addEventListener('mouseleave', () => {
+_progressWrap.addEventListener('pointermove', event => {
+  if (!_progressRect) _cacheProgressRect();
+  _queueProgressPointer(event.clientX, _draggingProgress);
+});
+_progressWrap.addEventListener('pointerup', event => {
+  if (!_draggingProgress) return;
+  _queueProgressPointer(event.clientX, true);
+  _draggingProgress = false;
+  if (_progressWrap.hasPointerCapture?.(event.pointerId)) {
+    _progressWrap.releasePointerCapture(event.pointerId);
+  }
+});
+_progressWrap.addEventListener('pointercancel', () => {
+  _draggingProgress = false;
+  _progressPointerInside = false;
+  _pendingProgressSeek = false;
+  _progressRect = null;
+  _progressTooltipSecond = -1;
+  if (_progressPointerFrame) {
+    cancelAnimationFrame(_progressPointerFrame);
+    _progressPointerFrame = 0;
+  }
   _progressTooltip.classList.add('hidden');
 });
+_progressWrap.addEventListener('pointerenter', event => {
+  _progressPointerInside = true;
+  _cacheProgressRect();
+  _queueProgressPointer(event.clientX, false);
+});
+_progressWrap.addEventListener('pointerleave', () => {
+  _progressPointerInside = false;
+  if (!_draggingProgress) {
+    if (_progressPointerFrame && !_pendingProgressSeek) {
+      cancelAnimationFrame(_progressPointerFrame);
+      _progressPointerFrame = 0;
+      _progressRect = null;
+    }
+    _progressTooltipSecond = -1;
+    _progressTooltip.classList.add('hidden');
+  }
+});
+_progressWrap.addEventListener('keydown', event => {
+  if (!audio.duration) return;
+  let targetTime = null;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+    targetTime = audio.currentTime - 5;
+  } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+    targetTime = audio.currentTime + 5;
+  } else if (event.key === 'Home') {
+    targetTime = 0;
+  } else if (event.key === 'End') {
+    targetTime = audio.duration;
+  }
+  if (targetTime == null) return;
+  event.preventDefault();
+  event.stopPropagation();
+  audio.currentTime = Math.max(0, Math.min(audio.duration, targetTime));
+  playbackProgress.sync();
+});
 
-// Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%, M=静音, L=喜欢, Cmd/Ctrl+F=搜索
+// Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%,
+// M=静音, L=喜欢, I=浏览/沉浸, Cmd/Ctrl+F=搜索
 window.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
     e.preventDefault();
     document.getElementById('search-input').focus();
     return;
   }
-  if (e.target.matches('input, textarea')) return;
+  if (e.target.closest?.('input, textarea, select, button, [contenteditable="true"], [role="slider"]')) return;
   if (e.key.toLowerCase() === 'm') { toggleMute(); return; }
   if (e.key.toLowerCase() === 'l') { toggleLike(); return; }
+  if (e.key.toLowerCase() === 'i') { toggleLayoutMode(); return; }
   if (e.code === 'Space') {
     e.preventDefault();
     initAudio();
@@ -4295,6 +5226,7 @@ window.addEventListener('keydown', (e) => {
     state.volume = Math.min(1, Math.round((state.volume + 0.05) * 20) / 20);
     audio.volume = state.volume;
     document.getElementById('volume-slider').value = state.volume * 100;
+    updateVolumeUI();
     showToast(`音量 ${Math.round(state.volume * 100)}%`);
     savePrefs();
   } else if (e.key === 'ArrowDown') {
@@ -4302,6 +5234,7 @@ window.addEventListener('keydown', (e) => {
     state.volume = Math.max(0, Math.round((state.volume - 0.05) * 20) / 20);
     audio.volume = state.volume;
     document.getElementById('volume-slider').value = state.volume * 100;
+    updateVolumeUI();
     showToast(`音量 ${Math.round(state.volume * 100)}%`);
     savePrefs();
   }
@@ -4316,8 +5249,14 @@ let _sleepStep = 0, _sleepTimer = null, _sleepRemaining = 0;
 function updateSleepUI() {
   const btn = document.getElementById('btn-sleep');
   const ind = document.getElementById('sleep-indicator');
-  if (_sleepStep === 0) { btn.classList.remove('active'); ind.textContent = ''; return; }
+  if (_sleepStep === 0) {
+    btn.classList.remove('active');
+    btn.setAttribute('aria-pressed', 'false');
+    ind.textContent = '关闭';
+    return;
+  }
   btn.classList.add('active');
+  btn.setAttribute('aria-pressed', 'true');
   const m = Math.floor(_sleepRemaining / 60);
   const s = Math.floor(_sleepRemaining % 60);
   ind.textContent = m > 0 ? `${m}m` : `${s}s`;
@@ -4339,7 +5278,11 @@ document.getElementById('btn-sleep').addEventListener('click', () => {
       clearInterval(_sleepTimer);
       _sleepStep = 0;
       updateSleepUI();
-      fadeTo(0, 2500).then(() => { audio.pause(); audio.volume = state.volume; });
+      fadeTo(0, 2500).then(completed => {
+        if (!completed) return;
+        audio.pause();
+        audio.volume = state.volume;
+      });
       showToast('已停止播放 · 晚安');
     }
   }, 1000);
@@ -4349,35 +5292,122 @@ document.getElementById('btn-sleep').addEventListener('click', () => {
 // PLAY QUEUE PANEL
 // ===================================================================
 let _queueOpen = false;
+let queueWindowStart = -1;
+let queueWindowEnd = -1;
+let queueScrollFrame = 0;
+const QUEUE_ROW_HEIGHT = 32;
+const QUEUE_OVERSCAN = 8;
+const QUEUE_WINDOW_STEP = 8;
 
-function renderQueue() {
-  const list = document.getElementById('queue-list');
-  if (!state.playlist.length) {
-    list.innerHTML = '<div style="padding:22px 16px;color:rgba(255,255,255,0.22);font-size:12px;text-align:center">队列为空</div>';
-    return;
-  }
-  list.innerHTML = state.playlist.map((s, i) => {
-    const name = s.name || '未知歌曲';
-    const artist = (s.artists || s.ar || []).map(a => a.name).join(' / ') || '未知歌手';
-    const dur = formatTime((s.dt || 0) / 1000);
-    const isCurrent = i === state.currentIndex;
-    return `<div class="queue-item${isCurrent ? ' current' : ''}" data-idx="${i}">
-      <span class="q-num">${isCurrent ? '▶' : i + 1}</span>
-      <span class="q-name">${escHtml(name)}</span>
-      <span class="q-artist">${escHtml(artist)}</span>
-      <span class="q-dur">${dur}</span>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('.queue-item').forEach(el => {
-    el.addEventListener('click', () => { playIndex(parseInt(el.dataset.idx)); toggleQueue(false); });
-  });
-  const cur = list.querySelector('.queue-item.current');
-  if (cur) setTimeout(() => cur.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+function queueItemHtml(song, index) {
+  const name = song.name || '未知歌曲';
+  const artist = (song.artists || song.ar || []).map(a => a.name).join(' / ') || '未知歌手';
+  const duration = formatTime((song.dt || 0) / 1000);
+  const isCurrent = index === state.currentIndex;
+  return `<div
+    class="queue-item${isCurrent ? ' current' : ''}"
+    data-idx="${index}"
+    role="button"
+    tabindex="0"
+    aria-posinset="${index + 1}"
+    aria-setsize="${state.playlist.length}"
+  >
+    <span class="q-num">${isCurrent ? '▶' : index + 1}</span>
+    <span class="q-name">${escHtml(name)}</span>
+    <span class="q-artist">${escHtml(artist)}</span>
+    <span class="q-dur">${duration}</span>
+  </div>`;
 }
 
+function renderQueueWindow({ force = false } = {}) {
+  const list = document.getElementById('queue-list');
+  const total = state.playlist.length;
+  if (!total) return;
+
+  const viewportRows = Math.max(
+    1,
+    Math.ceil((list.clientHeight || 280) / QUEUE_ROW_HEIGHT),
+  );
+  const rawStart = Math.max(
+    0,
+    Math.floor(list.scrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN,
+  );
+  const start = Math.floor(rawStart / QUEUE_WINDOW_STEP) * QUEUE_WINDOW_STEP;
+  const end = Math.min(
+    total,
+    start + viewportRows + QUEUE_OVERSCAN * 2 + QUEUE_WINDOW_STEP,
+  );
+  if (!force && start === queueWindowStart && end === queueWindowEnd) return;
+
+  queueWindowStart = start;
+  queueWindowEnd = end;
+  const topHeight = start * QUEUE_ROW_HEIGHT;
+  const bottomHeight = (total - end) * QUEUE_ROW_HEIGHT;
+  const rows = state.playlist
+    .slice(start, end)
+    .map((song, offset) => queueItemHtml(song, start + offset))
+    .join('');
+  list.innerHTML = `
+    <div class="queue-spacer" style="height:${topHeight}px" aria-hidden="true"></div>
+    ${rows}
+    <div class="queue-spacer" style="height:${bottomHeight}px" aria-hidden="true"></div>
+  `;
+}
+
+function renderQueue({ centerCurrent = true } = {}) {
+  const list = document.getElementById('queue-list');
+  if (queueScrollFrame) {
+    cancelAnimationFrame(queueScrollFrame);
+    queueScrollFrame = 0;
+  }
+  queueWindowStart = -1;
+  queueWindowEnd = -1;
+  if (!state.playlist.length) {
+    list.innerHTML = '<div style="padding:22px 16px;color:rgba(255,255,255,0.22);font-size:12px;text-align:center">队列为空</div>';
+    list.scrollTop = 0;
+    return;
+  }
+  if (centerCurrent && state.currentIndex >= 0) {
+    const viewportHeight = list.clientHeight || 280;
+    const target = state.currentIndex * QUEUE_ROW_HEIGHT
+      - (viewportHeight - QUEUE_ROW_HEIGHT) / 2;
+    list.scrollTop = Math.max(0, target);
+  }
+  renderQueueWindow({ force: true });
+}
+
+const queueList = document.getElementById('queue-list');
+queueList.addEventListener('scroll', () => {
+  if (queueScrollFrame) return;
+  queueScrollFrame = requestAnimationFrame(() => {
+    queueScrollFrame = 0;
+    renderQueueWindow();
+  });
+}, { passive: true });
+queueList.addEventListener('click', (event) => {
+  const item = event.target.closest('.queue-item');
+  if (!item) return;
+  playIndex(Number(item.dataset.idx));
+  toggleQueue(false);
+});
+queueList.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.code !== 'Space') return;
+  const item = event.target.closest('.queue-item');
+  if (!item) return;
+  event.preventDefault();
+  playIndex(Number(item.dataset.idx));
+  toggleQueue(false);
+});
+
 function toggleQueue(show) {
-  _queueOpen = show !== undefined ? show : !_queueOpen;
-  document.getElementById('queue-panel').classList.toggle('hidden', !_queueOpen);
+  const nextOpen = show !== undefined ? Boolean(show) : !_queueOpen;
+  if (nextOpen && _settingsOpen) toggleSettings(false, { returnFocus: false });
+  _queueOpen = nextOpen;
+  const panel = document.getElementById('queue-panel');
+  panel.classList.toggle('hidden', !_queueOpen);
+  panel.setAttribute('aria-hidden', String(!_queueOpen));
+  document.getElementById('btn-queue').classList.toggle('active', _queueOpen);
+  document.getElementById('btn-queue').setAttribute('aria-expanded', String(_queueOpen));
   if (_queueOpen) renderQueue();
 }
 
@@ -4385,20 +5415,35 @@ document.getElementById('btn-queue').addEventListener('click', () => toggleQueue
 document.getElementById('queue-close').addEventListener('click', () => toggleQueue(false));
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (_settingsOpen) { toggleSettings(false); return; }
   if (_queueOpen) { toggleQueue(false); return; }
   const qrModal = document.getElementById('qr-modal');
   if (qrModal && !qrModal.classList.contains('hidden')) {
-    clearInterval(qrPollTimer);
-    qrModal.classList.add('hidden');
+    closeLoginModal();
   }
 });
 
 // Volume
 const volSlider = document.getElementById('volume-slider');
+const _volIcon = document.getElementById('btn-mute');
+
+function updateVolumeUI() {
+  const muted = state.volume === 0;
+  const value = Math.round(state.volume * 100);
+  _volIcon.classList.toggle('active', muted);
+  _volIcon.setAttribute('aria-pressed', String(muted));
+  _volIcon.setAttribute('aria-label', muted ? '取消静音' : '静音');
+  _volIcon.title = muted ? '取消静音' : '静音';
+  volSlider.setAttribute('aria-valuetext', muted ? '静音' : `${value}%`);
+}
+
 volSlider.value = state.volume * 100;
+updateVolumeUI();
 volSlider.addEventListener('input', () => {
   state.volume = volSlider.value / 100;
+  _preMuteVolume = null;
   audio.volume = state.volume;
+  updateVolumeUI();
   savePrefs();
 });
 
@@ -4414,18 +5459,19 @@ function toggleMute() {
   }
   audio.volume = state.volume;
   volSlider.value = state.volume * 100;
+  updateVolumeUI();
   savePrefs();
   showToast(state.volume === 0 ? '静音 🔇' : `音量 ${Math.round(state.volume * 100)}%`);
 }
-const _volIcon = document.querySelector('.vol-icon');
-if (_volIcon) {
-  _volIcon.style.cursor = 'pointer';
-  _volIcon.addEventListener('click', toggleMute);
-}
+_volIcon.addEventListener('click', toggleMute);
 
 // ── Favorites: per-song, persisted, synced to NetEase when logged in ──
 // (The old handler was a single global boolean — the heart lied to the user.)
-let favMap = JSON.parse(localStorage.getItem('mp_favs') || '{}');
+let favMap = readStoredJson(
+  'mp_favs',
+  {},
+  value => value !== null && typeof value === 'object' && !Array.isArray(value),
+);
 
 function currentSong() {
   return state.currentIndex >= 0 ? state.playlist[state.currentIndex] : null;
@@ -4434,9 +5480,15 @@ function currentSong() {
 function updateLikeUI() {
   const song = currentSong();
   const liked = !!(song && favMap[song.id]);
-  document.getElementById('btn-like').classList.toggle('liked', liked);
-  document.getElementById('icon-heart').style.display = liked ? 'none' : '';
-  document.getElementById('icon-heart-filled').style.display = liked ? '' : 'none';
+  const button = document.getElementById('btn-like');
+  button.classList.toggle('liked', liked);
+  button.setAttribute('aria-pressed', String(liked));
+  button.setAttribute('aria-label', liked ? '取消喜欢' : '加入喜欢');
+  button.title = liked ? '取消喜欢' : '加入喜欢';
+  document.getElementById('icon-heart')
+    .setAttribute('aria-hidden', String(liked));
+  document.getElementById('icon-heart-filled')
+    .setAttribute('aria-hidden', String(!liked));
 }
 
 function toggleLike() {
@@ -4468,13 +5520,516 @@ document.getElementById('btn-like').addEventListener('click', toggleLike);
 // SEARCH
 // ===================================================================
 let searchTimer = null;
+let searchRequestId = 0;
+let currentSearchQuery = '';
+let currentSearchFilter = SEARCH_FILTERS.ALL;
+let currentSearchSongs = [];
+let currentSearchEntityType = 'song';
+let currentEntitySearchResults = null;
+let activeEntityDetail = null;
+let entityBrowseSnapshot = null;
+let entityDetailRequestId = 0;
+let activeBrowseTransition = null;
+let browseTransitionGeneration = 0;
+let entityScrollCleanup = null;
+const searchFilterButtons = [...document.querySelectorAll('.search-filter')];
+const searchTypeButtons = [...document.querySelectorAll('.search-type')];
+const searchTypeLabels = Object.freeze({
+  song: '歌曲',
+  [ENTITY_TYPES.ARTIST]: '歌手',
+  [ENTITY_TYPES.ALBUM]: '专辑',
+  [ENTITY_TYPES.PLAYLIST]: '歌单',
+});
+const compactNumberFormatter = new Intl.NumberFormat('zh-CN', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+function transitionBrowseContent(update, direction = 'replace') {
+  const transitionGeneration = ++browseTransitionGeneration;
+  if (activeBrowseTransition?.skipTransition) {
+    activeBrowseTransition.skipTransition();
+  }
+  const guardedUpdate = () => {
+    if (transitionGeneration !== browseTransitionGeneration) return undefined;
+    return update();
+  };
+
+  const motionClass = direction === 'forward'
+    ? 'entity-nav-forward'
+    : (direction === 'back' ? 'entity-nav-back' : '');
+
+  if (!document.startViewTransition || prefersReducedMotion()) {
+    guardedUpdate();
+    return Promise.resolve();
+  }
+
+  document.body.classList.remove('entity-nav-forward', 'entity-nav-back');
+  if (motionClass) document.body.classList.add(motionClass);
+  const transition = document.startViewTransition(guardedUpdate);
+  activeBrowseTransition = transition;
+
+  return transition.finished.catch(() => {}).finally(() => {
+    if (activeBrowseTransition !== transition) return;
+    activeBrowseTransition = null;
+    document.body.classList.remove('entity-nav-forward', 'entity-nav-back');
+  });
+}
+
+function cleanupEntityScroll() {
+  if (!entityScrollCleanup) return;
+  entityScrollCleanup();
+  entityScrollCleanup = null;
+}
+
+function canPlaySearchSong(song) {
+  if (song?.playable === false || song?.available === false || song?.noCopyrightRcmd) return false;
+  if (Number(song?.st) < 0 || Number(song?.privilege?.st) < 0) return false;
+  return Boolean(sessionCookie) || !(Number(song?.fee) > 0);
+}
+
+function setSearchFiltersEnabled(enabled) {
+  searchFilterButtons.forEach(button => {
+    button.disabled = currentSearchEntityType !== 'song' || !enabled;
+  });
+}
+
+function updateSearchFilterSelection() {
+  searchFilterButtons.forEach(button => {
+    const selected = button.dataset.filter === currentSearchFilter;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function updateSearchTypeSelection() {
+  searchTypeButtons.forEach(button => {
+    const selected = button.dataset.type === currentSearchEntityType;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+
+  const label = searchTypeLabels[currentSearchEntityType] || '音乐';
+  document.getElementById('search-input').placeholder = `搜索${label}...`;
+}
+
+function isSearchPanelActive() {
+  return document.getElementById('tab-search').classList.contains('active');
+}
+
+function updateSearchChrome() {
+  const searchPanelActive = isSearchPanelActive();
+  const inDetail = Boolean(activeEntityDetail);
+  const types = document.getElementById('search-types');
+  const filters = document.getElementById('search-filters');
+  const nav = document.getElementById('entity-nav');
+
+  types.classList.toggle('types-hidden', !searchPanelActive || inDetail);
+  filters.classList.toggle(
+    'filters-hidden',
+    !searchPanelActive || inDetail || currentSearchEntityType !== 'song',
+  );
+  nav.classList.toggle('visible', searchPanelActive && inDetail);
+  nav.setAttribute('aria-hidden', String(!searchPanelActive || !inDetail));
+
+  const navTitle = document.getElementById('entity-nav-title');
+  navTitle.textContent = inDetail ? activeEntityDetail.title : '';
+}
+
+function renderCurrentSearch() {
+  const groups = prepareSearchResults(currentSearchSongs, currentSearchQuery, {
+    filter: currentSearchFilter,
+    isPlayable: canPlaySearchSong,
+  });
+  renderSearchResults(groups, currentSearchQuery);
+}
+
+function renderSearchSkeleton(entityType = currentSearchEntityType) {
+  cleanupEntityScroll();
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.classList.remove('motion-list-enter');
+  const label = searchTypeLabels[entityType] || '结果';
+  wrap.innerHTML = `
+    <div class="search-result-summary"><span class="skeleton skeleton-line" style="--skeleton-width:72px">加载${escHtml(label)}</span></div>
+    <div class="skeleton-list skeleton-shimmer" aria-label="正在加载搜索结果">
+      ${Array.from({ length: 6 }, () => `
+        <div class="${entityType === 'song' ? 'song-item' : 'entity-card'} skeleton-row" aria-hidden="true">
+          <div class="skeleton skeleton-art"></div>
+          <div class="skeleton-copy">
+            <div class="skeleton skeleton-line" style="--skeleton-width:72%"></div>
+            <div class="skeleton skeleton-line" style="--skeleton-width:46%;--skeleton-gap:7px"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function formatCompactNumber(value) {
+  return Number.isFinite(Number(value))
+    ? compactNumberFormatter.format(Number(value))
+    : '';
+}
+
+function getEntityMeta(card) {
+  const parts = [];
+  if (card.trackCount != null) parts.push(`${card.trackCount} 首`);
+  if (card.type === ENTITY_TYPES.ARTIST && card.albumCount != null) {
+    parts.push(`${card.albumCount} 张专辑`);
+  }
+  if (card.type === ENTITY_TYPES.PLAYLIST && card.playCount != null) {
+    parts.push(`${formatCompactNumber(card.playCount)} 次播放`);
+  }
+  if (card.type === ENTITY_TYPES.ALBUM && card.publishTime) {
+    const year = new Date(card.publishTime).getFullYear();
+    if (Number.isFinite(year)) parts.push(String(year));
+  }
+  return parts.join(' · ');
+}
+
+function getEntityImageHtml(card, imageSize = 120) {
+  if (!card.imageUrl) {
+    return `<div class="entity-card-placeholder" aria-hidden="true">♪</div>`;
+  }
+
+  return `
+    <img
+      class="entity-card-image"
+      src="${escHtml(card.imageUrl)}?param=${imageSize}y${imageSize}"
+      alt="${escHtml(card.title)}封面"
+      loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"
+    >
+    <div class="entity-card-placeholder" style="display:none" aria-hidden="true">♪</div>
+  `;
+}
+
+function renderEntityPrompt() {
+  cleanupEntityScroll();
+  const label = searchTypeLabels[currentSearchEntityType] || '音乐';
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.classList.remove('motion-list-enter');
+  wrap.innerHTML = `
+    <div id="empty-state">
+      <div class="entity-card-placeholder" aria-hidden="true">⌕</div>
+      <span>搜索你想找的${escHtml(label)}</span>
+    </div>
+  `;
+}
+
+function renderEntitySearchResults(result) {
+  cleanupEntityScroll();
+  const wrap = document.getElementById('playlist-wrap');
+  const items = result?.items?.filter(card => card.id != null) || [];
+  wrap.classList.remove('motion-list-enter');
+
+  if (!items.length) {
+    wrap.innerHTML = `<div id="empty-state"><span>没有找到相关${escHtml(searchTypeLabels[currentSearchEntityType])}</span></div>`;
+    return;
+  }
+
+  wrap.innerHTML = '';
+  wrap.classList.add('motion-list-enter');
+  const summary = document.createElement('div');
+  summary.className = 'search-result-summary';
+  summary.innerHTML = `
+    <span><strong>${items.length}</strong> 个${escHtml(searchTypeLabels[currentSearchEntityType])}</span>
+    ${result.total > items.length ? `<span>共 ${result.total} 个</span>` : `<span>${escHtml(result.query)}</span>`}
+  `;
+  wrap.appendChild(summary);
+
+  const fragment = document.createDocumentFragment();
+  items.forEach((card, index) => {
+    const button = document.createElement('button');
+    const meta = getEntityMeta(card);
+    button.type = 'button';
+    button.className = 'entity-card';
+    button.dataset.entityType = card.type;
+    button.style.setProperty('--motion-order', String(Math.min(index, 8)));
+    button.setAttribute(
+      'aria-label',
+      `打开${searchTypeLabels[card.type]} ${card.title}${card.subtitle ? `，${card.subtitle}` : ''}`,
+    );
+    button.innerHTML = `
+      ${getEntityImageHtml(card)}
+      <span class="entity-card-copy">
+        <span class="entity-card-title">${escHtml(card.title)}</span>
+        <span class="entity-card-subtitle">${escHtml(card.subtitle)}</span>
+      </span>
+      ${meta ? `<span class="entity-card-meta">${escHtml(meta)}</span>` : ''}
+      <span class="entity-card-chevron" aria-hidden="true">›</span>
+    `;
+    button.addEventListener('click', () => openEntityDetail(card));
+    fragment.appendChild(button);
+  });
+  wrap.appendChild(fragment);
+}
+
+function buildEntityHero(card) {
+  const meta = getEntityMeta(card);
+  return `
+    <section class="entity-detail-hero" data-entity-type="${escHtml(card.type)}" aria-label="${escHtml(card.title)}">
+      ${getEntityImageHtml(card, 160)}
+      <div>
+        <h2 class="entity-detail-title">${escHtml(card.title)}</h2>
+        <div class="entity-detail-subtitle">${escHtml(card.subtitle)}</div>
+        ${meta ? `<div class="entity-detail-subtitle">${escHtml(meta)}</div>` : ''}
+      </div>
+    </section>
+  `;
+}
+
+function createEntitySongItem(song, index, songs) {
+  const artistStr = song.ar
+    ? song.ar.map(artist => artist.name).join(' / ')
+    : (song.artists ? song.artists.map(artist => artist.name).join(' / ') : '未知歌手');
+  const duration = song.dt || song.duration;
+  const durationText = duration ? formatTime(duration / 1000) : '';
+  const picUrl = song.al?.picUrl || song.album?.picUrl || '';
+  const playable = canPlaySearchSong(song);
+  const row = document.createElement('div');
+  row.className = `song-item${playable ? '' : ' unplayable'}`;
+  row.dataset.idx = index;
+  row.dataset.songId = song.id;
+  row.style.setProperty('--motion-order', String(Math.min(index, 8)));
+
+  const thumbHtml = picUrl
+    ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="${escHtml(song.name)}封面" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none" aria-hidden="true">♪</div>`
+    : `<div class="song-thumb-placeholder" aria-hidden="true">♪</div>`;
+  row.innerHTML = `
+    ${thumbHtml}
+    <div class="song-info">
+      <div class="song-name-row">
+        <div class="song-name">${escHtml(song.name)}</div>
+        ${playable ? '' : '<span class="vip-badge" title="当前账号不可播放">🔒</span>'}
+      </div>
+      <div class="song-artist">${escHtml(artistStr)}</div>
+    </div>
+    <div class="eq-icon"><span></span><span></span><span></span></div>
+    ${durationText ? `<div class="song-dur">${durationText}</div>` : ''}
+  `;
+  row.setAttribute(
+    'aria-label',
+    `${song.name}，${artistStr}${durationText ? `，${durationText}` : ''}`,
+  );
+  bindSongItem(row, song, () => playFromBrowse(songs, index));
+  return row;
+}
+
+function renderEntityDetailSkeleton(card) {
+  cleanupEntityScroll();
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.classList.remove('motion-list-enter');
+  wrap.scrollTop = 0;
+  wrap.innerHTML = `
+    ${buildEntityHero(card)}
+    <div class="entity-detail-count">正在加载歌曲</div>
+    <div class="skeleton-list skeleton-shimmer" aria-label="正在加载歌曲">
+      ${Array.from({ length: 6 }, () => `
+        <div class="song-item skeleton-row" aria-hidden="true">
+          <div class="skeleton skeleton-art"></div>
+          <div class="skeleton-copy">
+            <div class="skeleton skeleton-line" style="--skeleton-width:70%"></div>
+            <div class="skeleton skeleton-line" style="--skeleton-width:44%;--skeleton-gap:7px"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderEntityDetail(card, songs) {
+  cleanupEntityScroll();
+  const groups = groupSearchResults(songs, { isPlayable: canPlaySearchSong });
+  const displaySongs = groups.map(group => group.song);
+  const duplicateCount = groups.reduce((sum, group) => sum + group.duplicateCount, 0);
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.classList.remove('motion-list-enter');
+  wrap.scrollTop = 0;
+  wrap.innerHTML = `
+    ${buildEntityHero(card)}
+    <div class="entity-detail-count">
+      ${displaySongs.length} 首歌曲${duplicateCount ? ` · 已收拢 ${duplicateCount} 个重复音源` : ''}
+    </div>
+  `;
+
+  if (!displaySongs.length) {
+    wrap.insertAdjacentHTML('beforeend', '<div id="empty-state"><span>这里还没有可显示的歌曲</span></div>');
+    return;
+  }
+
+  wrap.classList.add('motion-list-enter');
+  let renderedCount = 0;
+  let appendScheduled = false;
+  let appendRafId = 0;
+  const batchSize = 72;
+  const appendBatch = () => {
+    appendScheduled = false;
+    appendRafId = 0;
+    const fragment = document.createDocumentFragment();
+    const end = Math.min(displaySongs.length, renderedCount + batchSize);
+    for (let index = renderedCount; index < end; index++) {
+      fragment.appendChild(createEntitySongItem(displaySongs[index], index, displaySongs));
+    }
+    renderedCount = end;
+    wrap.appendChild(fragment);
+  };
+  const appendNearEnd = () => {
+    if (renderedCount >= displaySongs.length || appendScheduled) return;
+    if (wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 480) {
+      appendScheduled = true;
+      appendRafId = requestAnimationFrame(appendBatch);
+    }
+  };
+
+  appendBatch();
+  if (renderedCount < displaySongs.length) {
+    wrap.addEventListener('scroll', appendNearEnd, { passive: true });
+    entityScrollCleanup = () => {
+      wrap.removeEventListener('scroll', appendNearEnd);
+      if (appendRafId) cancelAnimationFrame(appendRafId);
+    };
+  }
+}
+
+async function openEntityDetail(card) {
+  if (!card?.id) return;
+  const wrap = document.getElementById('playlist-wrap');
+  entityBrowseSnapshot = {
+    scrollTop: wrap.scrollTop,
+    query: currentSearchQuery,
+    type: currentSearchEntityType,
+  };
+  activeEntityDetail = card;
+  const requestId = ++entityDetailRequestId;
+  updateSearchChrome();
+
+  const endpoint = buildEntityTracksEndpoint(card.type, card.id, {
+    limit: 1000,
+    offset: 0,
+  });
+  const loadPromise = api(endpoint, {
+    includeSession: false,
+    timeoutMs: card.type === ENTITY_TYPES.PLAYLIST ? 24000 : 15000,
+  }).then(
+    data => ({ data, error: null }),
+    error => ({ data: null, error }),
+  );
+  await transitionBrowseContent(() => renderEntityDetailSkeleton(card), 'forward');
+
+  try {
+    const { data, error } = await loadPromise;
+    if (error) throw error;
+    if (requestId !== entityDetailRequestId || activeEntityDetail?.id !== card.id) return;
+    const songs = Array.isArray(data.songs) ? data.songs : [];
+    await transitionBrowseContent(() => renderEntityDetail(card, songs));
+  } catch (err) {
+    if (requestId !== entityDetailRequestId || activeEntityDetail?.id !== card.id) return;
+    console.error(err);
+    await transitionBrowseContent(() => {
+      const wrap = document.getElementById('playlist-wrap');
+      wrap.innerHTML = `
+        ${buildEntityHero(card)}
+        <div id="status-msg">加载失败，请返回后重试：${escHtml(err.message)}</div>
+      `;
+    });
+  }
+}
+
+async function returnFromEntityDetail() {
+  if (!activeEntityDetail) return;
+  entityDetailRequestId++;
+  cleanupEntityScroll();
+  activeEntityDetail = null;
+  updateSearchChrome();
+  await transitionBrowseContent(() => {
+    if (currentEntitySearchResults) {
+      renderEntitySearchResults(currentEntitySearchResults);
+    } else {
+      renderEntityPrompt();
+    }
+  }, 'back');
+  requestAnimationFrame(() => {
+    document.getElementById('playlist-wrap').scrollTop = entityBrowseSnapshot?.scrollTop || 0;
+  });
+}
+
+searchFilterButtons.forEach(button => {
+  button.addEventListener('click', () => {
+    if (
+      currentSearchEntityType !== 'song'
+      || activeEntityDetail
+      || !currentSearchQuery
+      || !currentSearchSongs.length
+    ) return;
+    currentSearchFilter = button.dataset.filter;
+    updateSearchFilterSelection();
+    renderCurrentSearch();
+  });
+});
+setSearchFiltersEnabled(false);
+
+searchTypeButtons.forEach((button, index) => {
+  button.addEventListener('click', () => selectSearchEntityType(button.dataset.type));
+  button.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    const nextIndex = (index + direction + searchTypeButtons.length) % searchTypeButtons.length;
+    searchTypeButtons[nextIndex].focus();
+    selectSearchEntityType(searchTypeButtons[nextIndex].dataset.type);
+  });
+});
+
+function selectSearchEntityType(type) {
+  if (!Object.prototype.hasOwnProperty.call(searchTypeLabels, type)) return;
+  if (type === currentSearchEntityType && !activeEntityDetail) return;
+  searchRequestId++;
+  entityDetailRequestId++;
+  cleanupEntityScroll();
+  activeEntityDetail = null;
+  currentSearchEntityType = type;
+  currentEntitySearchResults = null;
+  updateSearchTypeSelection();
+  updateSearchChrome();
+  setSearchFiltersEnabled(Boolean(currentSearchSongs.length));
+
+  const query = document.getElementById('search-input').value.trim();
+  if (query) {
+    performSearch(query);
+  } else {
+    transitionBrowseContent(() => {
+      if (type === 'song') renderHistory();
+      else renderEntityPrompt();
+    });
+  }
+}
+
+document.getElementById('entity-back').addEventListener('click', returnFromEntityDetail);
 
 document.getElementById('search-input').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
   if (!q) {
+    searchRequestId++;
+    entityDetailRequestId++;
+    cleanupEntityScroll();
+    currentSearchQuery = '';
+    currentSearchSongs = [];
+    currentEntitySearchResults = null;
+    activeEntityDetail = null;
+    currentSearchFilter = SEARCH_FILTERS.ALL;
+    updateSearchFilterSelection();
+    updateSearchChrome();
+    setSearchFiltersEnabled(false);
     // Show history in the browse list but leave the play queue untouched.
-    renderHistory();
+    if (currentSearchEntityType === 'song') renderHistory();
+    else renderEntityPrompt();
     return;
   }
   searchTimer = setTimeout(() => performSearch(q), 400);
@@ -4482,6 +6037,7 @@ document.getElementById('search-input').addEventListener('input', (e) => {
 
 document.getElementById('search-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
+    e.preventDefault();
     clearTimeout(searchTimer);
     const q = e.target.value.trim();
     if (q) performSearch(q);
@@ -4490,31 +6046,82 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
 
 async function performSearch(q) {
   const wrap = document.getElementById('playlist-wrap');
-  wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
+  const requestId = ++searchRequestId;
+  entityDetailRequestId++;
+  cleanupEntityScroll();
+  activeEntityDetail = null;
+  currentSearchQuery = q.trim();
+  updateSearchChrome();
+  setSearchFiltersEnabled(false);
+  const entityType = currentSearchEntityType;
+  let requestPromise;
+
+  if (entityType === 'song') {
+    requestPromise = searchSongs(currentSearchQuery);
+  } else {
+    const endpoint = buildEntitySearchEndpoint(entityType, currentSearchQuery, {
+      cloud: false,
+      limit: 40,
+      offset: 0,
+    });
+    requestPromise = api(endpoint, {
+      includeSession: false,
+      timeoutMs: 14000,
+    });
+  }
+  requestPromise = requestPromise.then(
+    response => ({ response, error: null }),
+    error => ({ response: null, error }),
+  );
+
+  await transitionBrowseContent(() => renderSearchSkeleton(entityType));
 
   try {
-    // Searching only updates the browse list (via renderPlaylist) — it does
+    // Searching only updates the browse list (via renderSearchResults) — it does
     // NOT touch the play queue. The queue only changes when you actually
     // play or enqueue a song.
-    const songs = await searchSongs(q);
-    renderPlaylist(songs);
-    if (!songs.length) {
-      wrap.innerHTML = `<div id="empty-state"><span style="color:rgba(255,255,255,0.35);font-size:13px">没有找到 "${escHtml(q)}"</span></div>`;
+    const { response, error } = await requestPromise;
+    if (error) throw error;
+    if (requestId !== searchRequestId) return;
+
+    if (entityType === 'song') {
+      const songs = response;
+      currentSearchSongs = songs;
+      currentEntitySearchResults = null;
+      setSearchFiltersEnabled(Boolean(songs.length));
+      if (!songs.length) {
+        wrap.innerHTML = `<div id="empty-state"><span>没有找到 "${escHtml(currentSearchQuery)}"</span></div>`;
+        return;
+      }
+      await transitionBrowseContent(renderCurrentSearch);
+      return;
     }
+
+    currentSearchSongs = [];
+    currentEntitySearchResults = prepareEntitySearchResults(
+      response,
+      entityType,
+      currentSearchQuery,
+    );
+    await transitionBrowseContent(() => renderEntitySearchResults(currentEntitySearchResults));
   } catch (err) {
+    if (requestId !== searchRequestId) return;
+    currentSearchSongs = [];
+    currentEntitySearchResults = null;
+    setSearchFiltersEnabled(false);
     console.error(err);
     if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
-      // The API is bundled and auto-started by the app, so this means it
-      // hasn't finished coming up (or crashed) — a wait/retry, not a
-      // "please install" situation.
       wrap.innerHTML = `<div id="status-msg">
-        音乐服务正在启动，请稍候重试…
+        音乐服务响应较慢，请按回车重试…
       </div>`;
     } else {
       wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
     }
   }
 }
+
+updateSearchTypeSelection();
+updateSearchChrome();
 
 // ===================================================================
 // UTILS
@@ -4531,19 +6138,105 @@ function escHtml(str) {
 }
 
 let toastTimer = null;
-function showToast(msg) {
+let toastCleanupTimer = null;
+let toastActionHandler = null;
+let toastGeneration = 0;
+let toastMessageAnimation = null;
+let toastMessageUpdatedAt = 0;
+const toastActionButton = document.getElementById('toast-action');
+toastActionButton.hidden = false;
+toastActionButton.disabled = true;
+toastActionButton.tabIndex = -1;
+toastActionButton.setAttribute('aria-hidden', 'true');
+
+function hideToast(generation = toastGeneration) {
+  if (generation !== toastGeneration) return;
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  const message = document.getElementById('toast-message');
+  const action = document.getElementById('toast-action');
+  t.classList.remove('show', 'is-actionable');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  toastTimer = null;
+  clearTimeout(toastCleanupTimer);
+  toastCleanupTimer = setTimeout(() => {
+    if (generation !== toastGeneration) return;
+    message.textContent = '';
+    action.disabled = true;
+    action.tabIndex = -1;
+    action.setAttribute('aria-hidden', 'true');
+    toastActionHandler = null;
+  }, 320);
 }
+
+function showToast(msg, {
+  actionLabel = '',
+  onAction = null,
+  durationMs = null,
+} = {}) {
+  const t = document.getElementById('toast');
+  const message = document.getElementById('toast-message');
+  const action = document.getElementById('toast-action');
+  const generation = ++toastGeneration;
+  const nextMessage = String(msg || '');
+  const updateTime = performance.now();
+  const isRapidUpdate = t.classList.contains('show')
+    && updateTime - toastMessageUpdatedAt < 180;
+  toastMessageUpdatedAt = updateTime;
+  const animateMessage = t.classList.contains('show')
+    && message.textContent
+    && message.textContent !== nextMessage
+    && !isRapidUpdate
+    && !prefersReducedMotion();
+
+  clearTimeout(toastTimer);
+  clearTimeout(toastCleanupTimer);
+  toastMessageAnimation?.cancel();
+  message.textContent = nextMessage;
+  if (animateMessage && typeof message.animate === 'function') {
+    toastMessageAnimation = message.animate([
+      { opacity: 0.7, transform: 'translate3d(0, 2px, 0)' },
+      { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+    ], {
+      duration: 140,
+      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    });
+  }
+  toastActionHandler = typeof onAction === 'function' ? onAction : null;
+  action.disabled = !toastActionHandler;
+  action.tabIndex = toastActionHandler ? 0 : -1;
+  action.setAttribute('aria-hidden', String(!toastActionHandler));
+  action.textContent = actionLabel || '撤销';
+  t.classList.toggle('is-actionable', Boolean(toastActionHandler));
+  t.classList.add('show');
+  toastTimer = setTimeout(
+    () => hideToast(generation),
+    durationMs ?? (toastActionHandler ? 6000 : 2800),
+  );
+}
+
+document.getElementById('toast-action').addEventListener('click', () => {
+  const handler = toastActionHandler;
+  const generation = toastGeneration;
+  if (!handler) return;
+  toastActionHandler = null;
+  clearTimeout(toastTimer);
+  document.getElementById('toast-action').disabled = true;
+  Promise.resolve()
+    .then(handler)
+    .catch((error) => {
+      console.error(error);
+      showToast('撤销失败，请稍后重试');
+    })
+    .finally(() => {
+      if (generation === toastGeneration) hideToast(generation);
+    });
+});
 
 // ===================================================================
 // PLAY HISTORY
 // ===================================================================
 const MAX_HISTORY = 20;
-let playHistory = JSON.parse(localStorage.getItem('mp_history') || '[]');
+let playHistory = readStoredJson('mp_history', [], Array.isArray);
 
 function addToHistory(song) {
   playHistory = playHistory.filter(s => s.id !== song.id);
@@ -4656,22 +6349,147 @@ renderHistory();
 // LOGIN STATE HELPERS
 // ===================================================================
 let refreshTimer = null;
-
 let userUid = null;
+let loginAttemptId = 0;
+let loginAbortController = null;
+let qrPollTimer = null;
+let qrRetryTimer = null;
 
-function markLoggedIn(uid) {
+function beginLoginAttempt() {
+  loginAttemptId += 1;
+  loginAbortController?.abort();
+  const controller = new AbortController();
+  loginAbortController = controller;
+  return { id: loginAttemptId, controller };
+}
+
+function isCurrentLoginAttempt(attempt) {
+  return Boolean(
+    attempt
+    && attempt.id === loginAttemptId
+    && loginAbortController === attempt.controller
+    && !attempt.controller.signal.aborted
+  );
+}
+
+function invalidateLoginAttempt() {
+  loginAttemptId += 1;
+  loginAbortController?.abort();
+  loginAbortController = null;
+}
+
+function clearQrLoginSchedule() {
+  clearTimeout(qrPollTimer);
+  clearTimeout(qrRetryTimer);
+  qrPollTimer = null;
+  qrRetryTimer = null;
+}
+
+function waitForLoginDelay(ms, attempt) {
+  return new Promise((resolve, reject) => {
+    if (!isCurrentLoginAttempt(attempt)) {
+      reject(new DOMException('Login attempt superseded', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      attempt.controller.signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Login attempt superseded', 'AbortError'));
+    };
+    attempt.controller.signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function resolveLoginUid(pendingCookie, attempt) {
+  let lastError = null;
+  let receivedStatus = false;
+  for (let retry = 0; retry < 3; retry += 1) {
+    if (!isCurrentLoginAttempt(attempt)) {
+      throw new DOMException('Login attempt superseded', 'AbortError');
+    }
+    try {
+      const status = await api(`/login/status?timestamp=${Date.now()}`, {
+        signal: attempt.controller.signal,
+        sessionOverride: pendingCookie,
+      });
+      if (!isCurrentLoginAttempt(attempt)) {
+        throw new DOMException('Login attempt superseded', 'AbortError');
+      }
+      receivedStatus = true;
+      const uid = status?.data?.profile?.userId ?? status?.profile?.userId;
+      if (uid != null) return String(uid);
+    } catch (error) {
+      if (error.name === 'AbortError') throw error;
+      lastError = error;
+    }
+    if (retry < 2) await waitForLoginDelay(320, attempt);
+  }
+  if (!receivedStatus && lastError) throw lastError;
+  return null;
+}
+
+function resetPlaylistAccountState() {
+  playlistLibraryRequestId += 1;
+  playlistTrackRequestId += 1;
+  playlistTrackAbortController?.abort();
+  playlistTrackAbortController = null;
+  cleanupPlaylistTrackScroll();
+  cancelPlaylistLibraryRender();
+  if (playlistFilterFrame) cancelAnimationFrame(playlistFilterFrame);
+  playlistFilterFrame = 0;
+  playlistContentAnimation?.cancel();
+  playlistContentAnimation = null;
+  playlistFlipAnimations.forEach(animation => animation.cancel());
+  playlistFlipAnimations = [];
+  userPlaylists = [];
+  activePlaylistId = null;
+  playlistLibraryQuery = '';
+  playlistLibraryPhase = 'idle';
+  playlistLibraryError = '';
+  playlistLibraryOwnerId = null;
+  playlistViewMode = 'library';
+  playlistLibraryScrollTop = 0;
+  playlistTrackCache.clear();
+  playlistTrackScrollPositions.clear();
+  const wrap = document.getElementById('mylist-wrap');
+  wrap.scrollTop = 0;
+  playlistBackButton.style.display = 'none';
+}
+
+function markLoggedIn(uid, { forceRefresh = false } = {}) {
+  if (uid == null || String(uid).trim() === '') return false;
+  const normalizedUid = String(uid);
   const btn = document.getElementById('login-btn');
   btn.textContent = '已登录';
   btn.classList.add('logged-in');
-  if (uid) userUid = uid;
+  const accountChanged = normalizedUid !== String(userUid ?? '');
+  if (accountChanged) resetPlaylistAccountState();
+  userUid = normalizedUid;
   // Show panel tabs and load playlists
   document.getElementById('panel-tabs').classList.remove('hidden');
-  if (userUid) loadUserPlaylists(userUid);
+  loadUserPlaylists(userUid, { force: accountChanged || forceRefresh });
   // 30-min heartbeat to keep cookie alive
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
     try { await api(`/login/refresh?timestamp=${Date.now()}`); } catch (_) {}
   }, 30 * 60 * 1000);
+  return true;
+}
+
+function commitLoginSession(pendingCookie, uid, attempt) {
+  if (!isCurrentLoginAttempt(attempt) || uid == null) return false;
+  const cleanedCookie = cleanCookieString(String(pendingCookie || ''));
+  if (!cleanedCookie) return false;
+  const normalizedUid = String(uid);
+  sessionCookie = cleanedCookie;
+  try {
+    localStorage.setItem('netease_cookie', sessionCookie);
+    localStorage.setItem('netease_uid', normalizedUid);
+  } catch (_) {}
+  return markLoggedIn(normalizedUid, { forceRefresh: true });
 }
 
 // ===================================================================
@@ -4679,137 +6497,795 @@ function markLoggedIn(uid) {
 // ===================================================================
 let userPlaylists = [];
 let activePlaylistId = null;
+let playlistLibraryQuery = '';
+let playlistLibrarySort = PLAYLIST_SORTS.RECENT;
+let playlistLibraryPhase = 'idle';
+let playlistLibraryError = '';
+let playlistLibraryOwnerId = null;
+let playlistLibraryRequestId = 0;
+let playlistTrackRequestId = 0;
+let playlistTrackAbortController = null;
+let playlistViewMode = 'library';
+let playlistLibraryScrollTop = 0;
+let playlistFilterFrame = 0;
+let playlistContentAnimation = null;
+let playlistFlipAnimations = [];
+let playlistLibraryRenderFrame = 0;
+let playlistLibraryRenderGeneration = 0;
+let playlistTrackScrollCleanup = null;
+const playlistTrackCache = new Map();
+const playlistTrackScrollPositions = new Map();
+const PLAYLIST_TRACK_BATCH_SIZE = 72;
+const PLAYLIST_TRACK_CACHE_LIMIT = 4;
+const playlistBackButton = document.getElementById('back-to-playlists');
 
-async function loadUserPlaylists(uid) {
-  const wrap = document.getElementById('mylist-wrap');
-  const back = document.getElementById('back-to-playlists');
-  try {
-    const data = await api(`/user/playlist?uid=${uid}&limit=50&timestamp=${Date.now()}`);
-    userPlaylists = data.playlist || [];
-    renderPlaylistList();
-  } catch (e) {
-    userPlaylists = [];
+function isPlaylistTabActive() {
+  return document.getElementById('tab-mylist').classList.contains('active');
+}
+
+function updatePlaylistSurface(update, direction = 'replace') {
+  if (!isPlaylistTabActive()) {
+    update();
+    return Promise.resolve();
+  }
+  return transitionBrowseContent(update, direction);
+}
+
+function cleanupPlaylistTrackScroll() {
+  if (!playlistTrackScrollCleanup) return;
+  playlistTrackScrollCleanup();
+  playlistTrackScrollCleanup = null;
+}
+
+function cancelPlaylistLibraryRender() {
+  playlistLibraryRenderGeneration += 1;
+  if (playlistLibraryRenderFrame) {
+    cancelAnimationFrame(playlistLibraryRenderFrame);
+    playlistLibraryRenderFrame = 0;
   }
 }
 
-function renderPlaylistList() {
+function createPlaylistState(message, detail = '', {
+  retryLabel = '',
+  onRetry = null,
+  skeleton = false,
+} = {}) {
+  const stateNode = document.createElement('div');
+  stateNode.className = `playlist-list-state${skeleton ? ' skeleton-shimmer' : ''}`;
+  if (skeleton) {
+    stateNode.setAttribute('aria-label', message);
+    stateNode.innerHTML = Array.from({ length: 6 }, (_, index) => `
+      <div class="skeleton-row" style="width:100%;--skeleton-row-height:54px">
+        <span class="skeleton skeleton-art" style="--skeleton-art-size:42px"></span>
+        <span class="skeleton-copy">
+          <span class="skeleton skeleton-line" style="--skeleton-width:${72 - index * 4}%"></span>
+          <span class="skeleton skeleton-line" style="--skeleton-width:${38 + index * 3}%"></span>
+        </span>
+      </div>
+    `).join('');
+    return stateNode;
+  }
+
+  const messageNode = document.createElement('span');
+  messageNode.textContent = message;
+  stateNode.appendChild(messageNode);
+  if (detail) {
+    const detailNode = document.createElement('small');
+    detailNode.textContent = detail;
+    stateNode.appendChild(detailNode);
+  }
+  if (retryLabel && typeof onRetry === 'function') {
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'playlist-retry';
+    retry.textContent = retryLabel;
+    retry.addEventListener('click', onRetry);
+    stateNode.appendChild(retry);
+  }
+  return stateNode;
+}
+
+function renderPlaylistLibrarySkeleton() {
+  playlistViewMode = 'library';
+  cancelPlaylistLibraryRender();
+  cleanupPlaylistTrackScroll();
   const wrap = document.getElementById('mylist-wrap');
-  const back = document.getElementById('back-to-playlists');
-  back.style.display = 'none';
-  wrap.innerHTML = '';
-  wrap.appendChild(back);
-  if (!userPlaylists.length) {
-    const empty = document.createElement('div');
-    empty.style.cssText = 'padding:20px 14px;font-size:12px;color:rgba(255,255,255,0.3)';
-    empty.textContent = '暂无歌单';
-    wrap.appendChild(empty);
+  playlistBackButton.style.display = 'none';
+  wrap.replaceChildren(
+    playlistBackButton,
+    createPlaylistState('正在加载歌单', '', { skeleton: true }),
+  );
+  wrap.scrollTop = 0;
+}
+
+function renderPlaylistLibraryFailure() {
+  playlistViewMode = 'library';
+  cancelPlaylistLibraryRender();
+  cleanupPlaylistTrackScroll();
+  const wrap = document.getElementById('mylist-wrap');
+  playlistBackButton.style.display = 'none';
+  wrap.replaceChildren(
+    playlistBackButton,
+    createPlaylistState(
+      '歌单暂时没有加载出来',
+      playlistLibraryError || '请检查音乐服务后重试。',
+      {
+        retryLabel: '重新加载',
+        onRetry: () => loadUserPlaylists(playlistLibraryOwnerId || userUid, { force: true }),
+      },
+    ),
+  );
+}
+
+function playlistLibraryToolbarHtml() {
+  const recentSelected = playlistLibrarySort === PLAYLIST_SORTS.RECENT ? ' selected' : '';
+  const nameSelected = playlistLibrarySort === PLAYLIST_SORTS.NAME ? ' selected' : '';
+  const countSelected = playlistLibrarySort === PLAYLIST_SORTS.TRACK_COUNT ? ' selected' : '';
+  return `
+    <div class="playlist-library-toolbar">
+      <label class="playlist-library-search" for="playlist-library-query">
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="5.5" cy="5.5" r="4"/><line x1="9" y1="9" x2="13" y2="13"/></svg>
+        <input
+          id="playlist-library-query"
+          type="search"
+          value="${escHtml(playlistLibraryQuery)}"
+          placeholder="筛选歌单或创建者"
+          autocomplete="off"
+          spellcheck="false"
+        >
+      </label>
+      <label class="sr-only" for="playlist-library-sort">歌单排序</label>
+      <select id="playlist-library-sort" aria-label="歌单排序">
+        <option value="${PLAYLIST_SORTS.RECENT}"${recentSelected}>最近更新</option>
+        <option value="${PLAYLIST_SORTS.NAME}"${nameSelected}>名称</option>
+        <option value="${PLAYLIST_SORTS.TRACK_COUNT}"${countSelected}>歌曲数</option>
+      </select>
+      <div class="playlist-library-summary">
+        <span id="playlist-library-summary-copy" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button id="playlist-library-refresh" type="button">刷新</button>
+      </div>
+    </div>
+    <div id="playlist-library-content"></div>
+  `;
+}
+
+function createPlaylistLibraryRow(playlist) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = `my-playlist-item${String(playlist.id) === String(activePlaylistId) ? ' active' : ''}`;
+  row.title = playlist.name;
+  row.disabled = playlist.id == null;
+  row.dataset.playlistId = playlist.id == null ? '' : String(playlist.id);
+  row.innerHTML = `
+    <span class="pl-icon" aria-hidden="true">
+      ${playlist.coverUrl
+        ? `<img src="${escHtml(playlist.coverUrl)}?param=96y96" alt="" loading="lazy">`
+        : '♪'}
+    </span>
+    <span class="pl-info">
+      <span class="pl-name">${escHtml(playlist.name)}</span>
+      <span class="pl-meta-row">
+        <span class="pl-creator">${escHtml(playlist.creatorName)}</span>
+        <span class="pl-meta-separator" aria-hidden="true"></span>
+        <span class="pl-count">${playlist.trackCount} 首</span>
+      </span>
+    </span>
+  `;
+  row.addEventListener('click', () => loadPlaylistTracks(playlist.id, playlist.name));
+  return row;
+}
+
+function captureVisiblePlaylistRects(content) {
+  const rows = [...content.querySelectorAll('.my-playlist-item')];
+  if (!rows.length || rows.length > 160) return null;
+  const viewport = document.getElementById('mylist-wrap').getBoundingClientRect();
+  const rects = new Map();
+  rows.forEach((row) => {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom < viewport.top || rect.top > viewport.bottom) return;
+    rects.set(row.dataset.playlistId, rect);
+  });
+  return rects;
+}
+
+function animatePlaylistLibraryFlip(content, beforeRects) {
+  playlistFlipAnimations.forEach(animation => animation.cancel());
+  playlistFlipAnimations = [];
+  if (!beforeRects?.size || prefersReducedMotion()) return false;
+
+  const viewport = document.getElementById('mylist-wrap').getBoundingClientRect();
+  [...content.querySelectorAll('.my-playlist-item')].forEach((row) => {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom < viewport.top || rect.top > viewport.bottom) return;
+    const before = beforeRects.get(row.dataset.playlistId);
+    const keyframes = before
+      ? [
+          {
+            opacity: 0.72,
+            transform: `translate3d(${before.left - rect.left}px, ${before.top - rect.top}px, 0)`,
+          },
+          { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+        ]
+      : [
+          { opacity: 0, transform: 'translate3d(0, 7px, 0)' },
+          { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+        ];
+    playlistFlipAnimations.push(row.animate(keyframes, {
+      duration: before ? 260 : 180,
+      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    }));
+  });
+  return playlistFlipAnimations.length > 0;
+}
+
+function updatePlaylistLibraryContent({
+  animate = true,
+  restoreScrollTop = null,
+} = {}) {
+  const content = document.getElementById('playlist-library-content');
+  const summary = document.getElementById('playlist-library-summary-copy');
+  const refresh = document.getElementById('playlist-library-refresh');
+  if (!content || !summary || !refresh) return;
+  const beforeRects = animate && !prefersReducedMotion()
+    ? captureVisiblePlaylistRects(content)
+    : null;
+  cancelPlaylistLibraryRender();
+  const renderGeneration = playlistLibraryRenderGeneration;
+
+  const model = preparePlaylistLibrary(userPlaylists, {
+    userId: playlistLibraryOwnerId || userUid,
+    query: playlistLibraryQuery,
+    sort: playlistLibrarySort,
+  });
+  const isRefreshing = playlistLibraryPhase === 'refreshing';
+  refresh.disabled = isRefreshing;
+  refresh.textContent = isRefreshing ? '刷新中…' : '刷新';
+  summary.innerHTML = playlistLibraryQuery
+    ? `<strong>${model.counts.visible}</strong> / ${model.counts.total} 个歌单`
+    : `<strong>${model.counts.total}</strong> 个歌单 · 创建 ${model.counts.allCreated} · 收藏 ${model.counts.allCollected}`;
+
+  playlistContentAnimation?.cancel();
+  if (!model.items.length) {
+    content.style.minHeight = '';
+    content.setAttribute('aria-busy', 'false');
+    content.replaceChildren(createPlaylistState(
+      playlistLibraryQuery ? '没有匹配的歌单' : '暂无歌单',
+      playlistLibraryQuery ? '换一个关键词试试。' : '新建或收藏的歌单会出现在这里。',
+    ));
+    if (restoreScrollTop != null) {
+      document.getElementById('mylist-wrap').scrollTop = 0;
+    }
+    if (animate && !prefersReducedMotion() && typeof content.animate === 'function') {
+      playlistContentAnimation = content.animate([
+        { opacity: 0.25, transform: 'translate3d(0, 5px, 0)' },
+        { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+      ], {
+        duration: 180,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      });
+    }
     return;
   }
-  userPlaylists.forEach(pl => {
-    const div = document.createElement('div');
-    div.className = 'my-playlist-item' + (pl.id === activePlaylistId ? ' active' : '');
-    const coverUrl = pl.coverImgUrl || '';
-    div.innerHTML = `
-      <div class="pl-icon">${coverUrl ? `<img src="${escHtml(coverUrl)}?param=64y64" loading="lazy">` : '♪'}</div>
-      <div class="pl-info">
-        <div class="pl-name">${escHtml(pl.name)}</div>
-        <div class="pl-count">${pl.trackCount ?? 0} 首</div>
-      </div>
-    `;
-    div.addEventListener('click', () => loadPlaylistTracks(pl.id, pl.name));
-    wrap.appendChild(div);
+
+  const groups = model.groups.filter(group => group.items.length);
+  content.setAttribute('aria-busy', 'true');
+  const stagedContent = document.createDocumentFragment();
+  let groupIndex = 0;
+  let itemIndex = 0;
+  let activeSection = null;
+  const mountGroup = (group) => {
+      const section = document.createElement('section');
+      section.className = 'playlist-group';
+      section.setAttribute('aria-label', group.label);
+      const header = document.createElement('div');
+      header.className = 'playlist-group-header';
+      header.innerHTML = `
+        <span>${escHtml(group.label)}</span>
+        <span class="playlist-group-count">${group.count}</span>
+      `;
+      section.appendChild(header);
+      stagedContent.appendChild(section);
+      return section;
+  };
+  const processChunk = () => {
+    playlistLibraryRenderFrame = 0;
+    if (renderGeneration !== playlistLibraryRenderGeneration) return;
+    const startedAt = performance.now();
+    let chunkCount = 0;
+    while (
+      groupIndex < groups.length
+      && (chunkCount < 6 || performance.now() - startedAt < 5)
+    ) {
+      const group = groups[groupIndex];
+      if (!activeSection) activeSection = mountGroup(group);
+      activeSection.appendChild(createPlaylistLibraryRow(group.items[itemIndex]));
+      itemIndex += 1;
+      chunkCount += 1;
+      if (itemIndex >= group.items.length) {
+        groupIndex += 1;
+        itemIndex = 0;
+        activeSection = null;
+      }
+    }
+
+    if (groupIndex < groups.length) {
+      playlistLibraryRenderFrame = requestAnimationFrame(processChunk);
+    } else {
+      if (renderGeneration !== playlistLibraryRenderGeneration) return;
+      content.style.minHeight = `${model.items.length * 66 + groups.length * 37}px`;
+      content.replaceChildren(stagedContent);
+      content.setAttribute('aria-busy', 'false');
+      if (restoreScrollTop != null) {
+        const wrap = document.getElementById('mylist-wrap');
+        wrap.scrollTop = Math.min(
+          restoreScrollTop,
+          Math.max(0, wrap.scrollHeight - wrap.clientHeight),
+        );
+      }
+      const didFlip = animatePlaylistLibraryFlip(content, beforeRects);
+      if (
+        animate
+        && !prefersReducedMotion()
+        && typeof content.animate === 'function'
+      ) {
+        playlistContentAnimation = content.animate([
+          {
+            opacity: didFlip ? 0.76 : 0.35,
+            transform: didFlip ? 'none' : 'translate3d(0, 5px, 0)',
+          },
+          { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+        ], {
+          duration: 180,
+          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        });
+      }
+    }
+  };
+  processChunk();
+}
+
+function bindPlaylistLibraryToolbar() {
+  const query = document.getElementById('playlist-library-query');
+  const sort = document.getElementById('playlist-library-sort');
+  const refresh = document.getElementById('playlist-library-refresh');
+  query?.addEventListener('input', (event) => {
+    playlistLibraryQuery = event.currentTarget.value;
+    if (playlistFilterFrame) return;
+    playlistFilterFrame = requestAnimationFrame(() => {
+      playlistFilterFrame = 0;
+      updatePlaylistLibraryContent();
+    });
+  });
+  sort?.addEventListener('change', (event) => {
+    playlistLibrarySort = event.currentTarget.value;
+    updatePlaylistLibraryContent();
+  });
+  refresh?.addEventListener('click', () => {
+    loadUserPlaylists(playlistLibraryOwnerId || userUid, { force: true });
   });
 }
 
-async function loadPlaylistTracks(playlistId, playlistName) {
-  activePlaylistId = playlistId;
+function renderPlaylistList({ restoreScroll = false } = {}) {
+  playlistViewMode = 'library';
+  cleanupPlaylistTrackScroll();
   const wrap = document.getElementById('mylist-wrap');
-  const back = document.getElementById('back-to-playlists');
-  wrap.innerHTML = '';
-  back.style.display = 'flex';
-  wrap.appendChild(back);
-  const loading = document.createElement('div');
-  loading.style.cssText = 'padding:20px 14px;font-size:12px;color:rgba(255,255,255,0.3)';
-  loading.textContent = '加载中...';
-  wrap.appendChild(loading);
+  playlistBackButton.style.display = 'none';
+
+  if (playlistLibraryPhase === 'loading' || playlistLibraryPhase === 'idle') {
+    renderPlaylistLibrarySkeleton();
+    return;
+  }
+  if (playlistLibraryPhase === 'error') {
+    renderPlaylistLibraryFailure();
+    return;
+  }
+
+  const shell = document.createElement('div');
+  shell.className = 'playlist-library-shell';
+  shell.innerHTML = playlistLibraryToolbarHtml();
+  wrap.replaceChildren(playlistBackButton, shell);
+  bindPlaylistLibraryToolbar();
+  wrap.scrollTop = 0;
+  updatePlaylistLibraryContent({
+    animate: false,
+    restoreScrollTop: restoreScroll ? playlistLibraryScrollTop : 0,
+  });
+}
+
+async function loadUserPlaylists(uid, { force = false } = {}) {
+  if (uid == null) return;
+  const ownerId = String(uid);
+  const ownerChanged = ownerId !== String(playlistLibraryOwnerId ?? '');
+  if (
+    !force
+    && !ownerChanged
+    && ['ready', 'empty', 'refreshing', 'loading'].includes(playlistLibraryPhase)
+  ) {
+    if (playlistViewMode === 'library' && !document.getElementById('playlist-library-content')) {
+      renderPlaylistList();
+    }
+    return;
+  }
+
+  const hadLibrary = !ownerChanged && userPlaylists.length > 0;
+  const requestId = ++playlistLibraryRequestId;
+  playlistLibraryOwnerId = ownerId;
+  playlistLibraryError = '';
+  playlistLibraryPhase = hadLibrary ? 'refreshing' : 'loading';
+  if (ownerChanged) {
+    userPlaylists = [];
+    playlistTrackCache.clear();
+    activePlaylistId = null;
+  }
+  if (playlistViewMode === 'library') {
+    if (hadLibrary) updatePlaylistLibraryContent({ animate: false });
+    else updatePlaylistSurface(renderPlaylistLibrarySkeleton, 'replace');
+  }
+
   try {
-    const data = await api(`/playlist/track/all?id=${playlistId}&limit=1000&timestamp=${Date.now()}`);
-    const songs = data.songs || [];
-    wrap.removeChild(loading);
-    // Render song items in mylist-wrap
-    const label = document.createElement('div');
-    label.className = 'section-label';
-    label.textContent = playlistName;
-    wrap.appendChild(label);
-    songs.forEach((song, i) => {
-      const artistStr = song.ar ? song.ar.map(a => a.name).join(' / ') : '未知歌手';
-      const dur = song.dt ? formatTime(song.dt / 1000) : '';
-      const picUrl = song.al?.picUrl || '';
-      const div = document.createElement('div');
-      div.className = 'song-item';
-      div.dataset.idx = i;
-      div.dataset.songId = song.id;
-      let thumbHtml = picUrl
-        ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
-        : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
-      div.innerHTML = `
-        ${thumbHtml}
-        <div class="song-info">
-          <div class="song-name">${escHtml(song.name)}</div>
-          <div class="song-artist">${escHtml(artistStr)}</div>
-        </div>
-        <div class="eq-icon"><span></span><span></span><span></span></div>
-        ${dur ? `<div class="song-dur">${dur}</div>` : ''}
-      `;
-      bindSongItem(div, song, () => playFromBrowse(songs, i));
-      wrap.appendChild(div);
-    });
-  } catch (e) {
-    loading.textContent = '加载失败: ' + e.message;
+    const data = await api(
+      `/user/playlist?uid=${encodeURIComponent(ownerId)}&limit=1000&offset=0&timestamp=${Date.now()}`,
+      { timeoutMs: 24000 },
+    );
+    if (requestId !== playlistLibraryRequestId) return;
+    if (data?.code != null && Number(data.code) !== 200) {
+      throw new Error(`歌单请求失败（code ${data.code}）`);
+    }
+    userPlaylists = Array.isArray(data?.playlist) ? data.playlist : [];
+    playlistLibraryPhase = userPlaylists.length ? 'ready' : 'empty';
+    if (force) playlistTrackCache.clear();
+    if (playlistViewMode === 'library') {
+      const scrollTop = document.getElementById('mylist-wrap').scrollTop;
+      playlistLibraryScrollTop = scrollTop;
+      await updatePlaylistSurface(
+        () => renderPlaylistList({ restoreScroll: true }),
+        'replace',
+      );
+    }
+  } catch (error) {
+    if (requestId !== playlistLibraryRequestId) return;
+    console.error(error);
+    if (hadLibrary) {
+      playlistLibraryPhase = 'ready';
+      if (playlistViewMode === 'library') updatePlaylistLibraryContent({ animate: false });
+      showToast('刷新失败，已保留现有歌单');
+      return;
+    }
+    playlistLibraryPhase = 'error';
+    playlistLibraryError = error.name === 'TimeoutError'
+      ? '音乐服务响应较慢，请稍后重试。'
+      : `音乐服务返回错误：${error.message}`;
+    if (playlistViewMode === 'library') {
+      await updatePlaylistSurface(renderPlaylistLibraryFailure, 'replace');
+    }
   }
 }
 
+function mountPlaylistTrackHeader(playlistName, countText = '') {
+  const wrap = document.getElementById('mylist-wrap');
+  playlistBackButton.style.display = 'flex';
+  const header = document.createElement('div');
+  header.className = 'playlist-track-header';
+  const title = document.createElement('div');
+  title.className = 'playlist-track-title';
+  title.textContent = playlistName || '歌单';
+  const count = document.createElement('div');
+  count.className = 'playlist-track-count';
+  count.textContent = countText;
+  header.append(playlistBackButton, title, count);
+  wrap.replaceChildren(header);
+  return count;
+}
+
+function renderPlaylistTrackSkeleton(playlistName) {
+  playlistViewMode = 'tracks';
+  cancelPlaylistLibraryRender();
+  cleanupPlaylistTrackScroll();
+  const wrap = document.getElementById('mylist-wrap');
+  mountPlaylistTrackHeader(playlistName, '加载中…');
+  wrap.appendChild(createPlaylistState('正在加载歌曲', '', { skeleton: true }));
+  wrap.scrollTop = 0;
+}
+
+function renderPlaylistTrackFailure(playlistId, playlistName, error) {
+  playlistViewMode = 'tracks';
+  cancelPlaylistLibraryRender();
+  cleanupPlaylistTrackScroll();
+  const wrap = document.getElementById('mylist-wrap');
+  mountPlaylistTrackHeader(playlistName, '');
+  wrap.appendChild(createPlaylistState(
+    '歌曲暂时没有加载出来',
+    error.name === 'TimeoutError' ? '音乐服务响应较慢。' : error.message,
+    {
+      retryLabel: '重新加载',
+      onRetry: () => loadPlaylistTracks(playlistId, playlistName, { force: true }),
+    },
+  ));
+}
+
+function rememberPlaylistTrackCache(playlistId, songs) {
+  const cacheKey = String(playlistId);
+  playlistTrackCache.delete(cacheKey);
+  playlistTrackCache.set(cacheKey, songs);
+  while (playlistTrackCache.size > PLAYLIST_TRACK_CACHE_LIMIT) {
+    playlistTrackCache.delete(playlistTrackCache.keys().next().value);
+  }
+}
+
+function renderPlaylistTracks(playlistId, playlistName, songs) {
+  playlistViewMode = 'tracks';
+  cancelPlaylistLibraryRender();
+  cleanupPlaylistTrackScroll();
+  const wrap = document.getElementById('mylist-wrap');
+  const count = mountPlaylistTrackHeader(playlistName, `${songs.length} 首`);
+  if (!songs.length) {
+    wrap.appendChild(createPlaylistState('这个歌单还没有歌曲'));
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'playlist-track-list';
+  wrap.appendChild(list);
+  let renderedCount = 0;
+  let batchTarget = 0;
+  let batchFrame = 0;
+  let scrollFrame = 0;
+  let restoreFrame = 0;
+  let disposed = false;
+  const updateTrackCount = () => {
+    count.textContent = renderedCount < songs.length
+      ? `已载入 ${renderedCount} / ${songs.length}`
+      : `${songs.length} 首`;
+  };
+  const processBatchChunk = () => {
+    batchFrame = 0;
+    if (disposed || renderedCount >= batchTarget) return;
+    const startedAt = performance.now();
+    const fragment = document.createDocumentFragment();
+    let chunkCount = 0;
+    while (
+      renderedCount < batchTarget
+      && (chunkCount < 6 || performance.now() - startedAt < 5)
+    ) {
+      fragment.appendChild(
+        createEntitySongItem(songs[renderedCount], renderedCount, songs),
+      );
+      renderedCount += 1;
+      chunkCount += 1;
+    }
+    list.appendChild(fragment);
+    updateTrackCount();
+    if (renderedCount < batchTarget) {
+      batchFrame = requestAnimationFrame(processBatchChunk);
+    } else {
+      updatePlaylistActive(state.currentIndex);
+    }
+  };
+  const appendBatch = () => {
+    if (disposed || renderedCount >= songs.length) return false;
+    if (renderedCount >= batchTarget) {
+      batchTarget = Math.min(
+        renderedCount + PLAYLIST_TRACK_BATCH_SIZE,
+        songs.length,
+      );
+    }
+    if (!batchFrame) processBatchChunk();
+    return renderedCount < songs.length;
+  };
+  appendBatch();
+
+  const cacheKey = String(playlistId);
+  const restoreTarget = playlistTrackScrollPositions.get(cacheKey) || 0;
+  let restoreCompleted = restoreTarget <= 0;
+  let userInterruptedRestore = false;
+  const markRestoreInterrupted = () => {
+    userInterruptedRestore = true;
+  };
+  const markPointerRestoreInterrupted = (event) => {
+    if (event.target === wrap) userInterruptedRestore = true;
+  };
+  const markKeyboardRestoreInterrupted = (event) => {
+    if ([
+      'ArrowUp',
+      'ArrowDown',
+      'PageUp',
+      'PageDown',
+      'Home',
+      'End',
+      ' ',
+    ].includes(event.key)) {
+      userInterruptedRestore = true;
+    }
+  };
+  const restoreScroll = () => {
+    restoreFrame = 0;
+    if (disposed) return;
+    if (userInterruptedRestore) {
+      restoreCompleted = true;
+      return;
+    }
+    if (
+      restoreTarget > 0
+      && renderedCount < songs.length
+      && wrap.scrollHeight < restoreTarget + wrap.clientHeight
+    ) {
+      appendBatch();
+      restoreFrame = requestAnimationFrame(restoreScroll);
+      return;
+    }
+    wrap.scrollTop = Math.min(restoreTarget, Math.max(0, wrap.scrollHeight - wrap.clientHeight));
+    restoreCompleted = true;
+  };
+  restoreFrame = requestAnimationFrame(restoreScroll);
+
+  const onScroll = () => {
+    if (scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = 0;
+      if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 480) {
+        appendBatch();
+      }
+    });
+  };
+  wrap.addEventListener('scroll', onScroll, { passive: true });
+  wrap.addEventListener('wheel', markRestoreInterrupted, { passive: true });
+  wrap.addEventListener('touchmove', markRestoreInterrupted, { passive: true });
+  wrap.addEventListener('pointerdown', markPointerRestoreInterrupted, { passive: true });
+  wrap.addEventListener('keydown', markKeyboardRestoreInterrupted);
+  playlistTrackScrollCleanup = () => {
+    disposed = true;
+    if (batchFrame) cancelAnimationFrame(batchFrame);
+    if (scrollFrame) cancelAnimationFrame(scrollFrame);
+    if (restoreFrame) cancelAnimationFrame(restoreFrame);
+    const savedScrollTop = !restoreCompleted && !userInterruptedRestore
+      ? restoreTarget
+      : wrap.scrollTop;
+    playlistTrackScrollPositions.set(cacheKey, savedScrollTop);
+    wrap.removeEventListener('scroll', onScroll);
+    wrap.removeEventListener('wheel', markRestoreInterrupted);
+    wrap.removeEventListener('touchmove', markRestoreInterrupted);
+    wrap.removeEventListener('pointerdown', markPointerRestoreInterrupted);
+    wrap.removeEventListener('keydown', markKeyboardRestoreInterrupted);
+  };
+}
+
+async function loadPlaylistTracks(playlistId, playlistName, { force = false } = {}) {
+  if (playlistId == null) return;
+  const wrap = document.getElementById('mylist-wrap');
+  if (playlistViewMode === 'library') playlistLibraryScrollTop = wrap.scrollTop;
+  playlistTrackAbortController?.abort();
+  playlistTrackAbortController = null;
+  activePlaylistId = playlistId;
+  const requestId = ++playlistTrackRequestId;
+  const cacheKey = String(playlistId);
+  const cachedSongs = !force ? playlistTrackCache.get(cacheKey) : null;
+
+  if (cachedSongs) {
+    await updatePlaylistSurface(
+      () => renderPlaylistTracks(playlistId, playlistName, cachedSongs),
+      'forward',
+    );
+    return;
+  }
+
+  const abortController = new AbortController();
+  playlistTrackAbortController = abortController;
+  const skeletonTransition = updatePlaylistSurface(
+    () => renderPlaylistTrackSkeleton(playlistName),
+    'forward',
+  );
+  const request = api(
+    `/playlist/track/all?id=${encodeURIComponent(playlistId)}&limit=1000&offset=0&timestamp=${Date.now()}`,
+    { timeoutMs: 24000, signal: abortController.signal },
+  ).then(
+    data => ({ data, error: null }),
+    error => ({ data: null, error }),
+  );
+  await skeletonTransition;
+  if (
+    requestId !== playlistTrackRequestId
+    || abortController.signal.aborted
+    || String(activePlaylistId) !== cacheKey
+  ) {
+    return;
+  }
+  try {
+    const outcome = await request;
+    if (requestId !== playlistTrackRequestId || String(activePlaylistId) !== cacheKey) return;
+    if (outcome.error) throw outcome.error;
+    const data = outcome.data;
+    if (data?.code != null && Number(data.code) !== 200) {
+      throw new Error(`歌曲请求失败（code ${data.code}）`);
+    }
+    const songs = Array.isArray(data?.songs) ? data.songs : [];
+    rememberPlaylistTrackCache(playlistId, songs);
+    await updatePlaylistSurface(
+      () => renderPlaylistTracks(playlistId, playlistName, songs),
+      'replace',
+    );
+  } catch (error) {
+    if (requestId !== playlistTrackRequestId || String(activePlaylistId) !== cacheKey) return;
+    if (error.name === 'AbortError') return;
+    console.error(error);
+    await updatePlaylistSurface(
+      () => renderPlaylistTrackFailure(playlistId, playlistName, error),
+      'replace',
+    );
+  } finally {
+    if (playlistTrackAbortController === abortController) {
+      playlistTrackAbortController = null;
+    }
+  }
+}
+
+function selectPanelTab(tab) {
+  const showPlaylists = tab === 'mylist';
+  const searchTab = document.getElementById('tab-search');
+  const playlistTab = document.getElementById('tab-mylist');
+  searchTab.classList.toggle('active', !showPlaylists);
+  playlistTab.classList.toggle('active', showPlaylists);
+  searchTab.setAttribute('aria-selected', String(!showPlaylists));
+  playlistTab.setAttribute('aria-selected', String(showPlaylists));
+  document.getElementById('playlist-wrap').style.display = showPlaylists ? 'none' : 'block';
+  document.getElementById('mylist-wrap').style.display = showPlaylists ? 'block' : 'none';
+  updateSearchChrome();
+}
+
 document.getElementById('tab-search').addEventListener('click', () => {
-  document.getElementById('tab-search').classList.add('active');
-  document.getElementById('tab-mylist').classList.remove('active');
-  document.getElementById('playlist-wrap').style.display = 'block';
-  document.getElementById('mylist-wrap').style.display = 'none';
+  transitionBrowseContent(() => selectPanelTab('search'), 'back');
 });
 
 document.getElementById('tab-mylist').addEventListener('click', () => {
-  document.getElementById('tab-mylist').classList.add('active');
-  document.getElementById('tab-search').classList.remove('active');
-  document.getElementById('playlist-wrap').style.display = 'none';
-  document.getElementById('mylist-wrap').style.display = 'block';
-  // Always refetch so playlist changes made elsewhere (phone/web) show up immediately.
-  if (userUid) loadUserPlaylists(userUid);
+  transitionBrowseContent(() => selectPanelTab('mylist'), 'forward');
+  if (userUid && playlistLibraryPhase === 'idle') {
+    loadUserPlaylists(userUid);
+  } else if (playlistViewMode === 'library' && !document.getElementById('playlist-library-content')) {
+    renderPlaylistList();
+  }
 });
 
-document.getElementById('back-to-playlists').addEventListener('click', () => {
-  // Going back to the playlist list is a browse action — the play queue keeps
-  // whatever was loaded so playback and next/prev continue uninterrupted.
-  renderPlaylistList();
+playlistBackButton.addEventListener('click', () => {
+  // Going back is a browse-only action; playback and its queue stay untouched.
+  playlistTrackAbortController?.abort();
+  playlistTrackAbortController = null;
+  playlistTrackRequestId += 1;
+  updatePlaylistSurface(() => renderPlaylistList({ restoreScroll: true }), 'back');
 });
 
 // ===================================================================
 // CHECK API + LOGIN STATUS ON LOAD
 // ===================================================================
 (async () => {
+  const startupAttempt = beginLoginAttempt();
+  const savedCookie = sessionCookie;
   // Retry a few times: on a cold packaged-app launch the bundled API server
   // can take 10s+ to boot, and a single 3s check used to race it and lose
   // (login button stuck on "登录" despite a valid saved cookie).
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
+      const timeoutSignal = AbortSignal.timeout(3000);
+      const signal = typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([startupAttempt.controller.signal, timeoutSignal])
+        : startupAttempt.controller.signal;
       await fetch(API + '/search?keywords=test&limit=1', {
         credentials: 'omit',
-        signal: AbortSignal.timeout(3000),
+        signal,
       });
-      const status = await api(`/login/status?timestamp=${Date.now()}`);
-      const uid = status?.data?.profile?.userId ?? status?.profile?.userId;
-      if (uid) markLoggedIn(uid);
+      if (!isCurrentLoginAttempt(startupAttempt)) return;
+      if (savedCookie) {
+        const uid = await resolveLoginUid(savedCookie, startupAttempt);
+        if (uid && isCurrentLoginAttempt(startupAttempt)) markLoggedIn(uid);
+      }
       return;
-    } catch {
-      await new Promise(r => setTimeout(r, 2500));
+    } catch (error) {
+      if (error.name === 'AbortError' || !isCurrentLoginAttempt(startupAttempt)) return;
+      if (attempt < 4) {
+        try {
+          await waitForLoginDelay(2500, startupAttempt);
+        } catch {
+          return;
+        }
+      }
     }
   }
 })();
@@ -4817,9 +7293,10 @@ document.getElementById('back-to-playlists').addEventListener('click', () => {
 // ===================================================================
 // 网易云 QR LOGIN
 // ===================================================================
-let qrPollTimer = null;
 
 async function startQrLogin() {
+  const loginAttempt = beginLoginAttempt();
+  clearQrLoginSchedule();
   const modal   = document.getElementById('qr-modal');
   const status  = document.getElementById('qr-status');
   const imgEl   = document.getElementById('qr-img');
@@ -4830,50 +7307,82 @@ async function startQrLogin() {
 
   try {
     // Step 1: get unikey
-    const keyData = await api('/login/qr/key');
+    const keyData = await api('/login/qr/key', {
+      includeSession: false,
+      signal: loginAttempt.controller.signal,
+    });
+    if (!isCurrentLoginAttempt(loginAttempt)) return;
     const key = keyData.data?.unikey;
     if (!key) { status.textContent = '获取失败，请检查 API 服务'; return; }
 
     // Step 2: get QR image (base64)
-    const qrData = await api(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true`);
+    const qrData = await api(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true`, {
+      includeSession: false,
+      signal: loginAttempt.controller.signal,
+    });
+    if (!isCurrentLoginAttempt(loginAttempt)) return;
     const qrImg  = qrData.data?.qrimg;
     if (!qrImg) { status.textContent = '二维码生成失败'; return; }
 
     imgEl.src = qrImg;
     status.textContent = '请用网易云音乐 App 扫码';
 
-    // Step 3: poll for scan confirmation (timestamp busts cache)
-    clearInterval(qrPollTimer);
-    qrPollTimer = setInterval(async () => {
+    // Step 3: poll for scan confirmation (timestamp busts cache). Recursive
+    // timeouts avoid overlapping requests on a slow upstream response.
+    const pollQrStatus = async () => {
+      qrPollTimer = null;
+      if (!isCurrentLoginAttempt(loginAttempt)) return;
       try {
-        const check = await api(`/login/qr/check?key=${encodeURIComponent(key)}&timestamp=${Date.now()}`);
+        const check = await api(
+          `/login/qr/check?key=${encodeURIComponent(key)}&timestamp=${Date.now()}`,
+          {
+            includeSession: false,
+            signal: loginAttempt.controller.signal,
+          },
+        );
+        if (!isCurrentLoginAttempt(loginAttempt)) return;
         const code  = check.code ?? check.body?.code ?? 0;
         if (code === 802) {
           status.textContent = '已扫码，请在手机上确认登录...';
         } else if (code === 803) {
-          clearInterval(qrPollTimer);
-          modal.classList.add('hidden');
-          if (check.cookie) {
-            sessionCookie = cleanCookieString(check.cookie);
-            localStorage.setItem('netease_cookie', sessionCookie);
+          clearQrLoginSchedule();
+          const pendingCookie = cleanCookieString(String(check.cookie || ''));
+          if (!pendingCookie) {
+            status.textContent = '登录已确认，但未收到会话，请重新扫码';
+            return;
           }
-          let qrUid = null;
-          try {
-            const st = await api(`/login/status?timestamp=${Date.now()}`);
-            qrUid = st?.data?.profile?.userId ?? st?.profile?.userId;
-          } catch (_) {}
-          markLoggedIn(qrUid);
+          status.textContent = '正在确认账号…';
+          const qrUid = await resolveLoginUid(pendingCookie, loginAttempt);
+          if (!isCurrentLoginAttempt(loginAttempt)) return;
+          if (!qrUid || !commitLoginSession(pendingCookie, qrUid, loginAttempt)) {
+            status.textContent = '账号确认失败，请重新扫码';
+            return;
+          }
+          modal.classList.add('hidden');
           showToast('登录成功，已解锁更多歌曲 🎵');
+          return;
         } else if (code === 800) {
-          clearInterval(qrPollTimer);
           status.textContent = '二维码已过期，正在自动刷新...';
-          setTimeout(() => startQrLogin(), 1500);
+          qrRetryTimer = setTimeout(() => {
+            qrRetryTimer = null;
+            if (isCurrentLoginAttempt(loginAttempt)) startQrLogin();
+          }, 1500);
+          return;
         }
-      } catch (_) {}
-    }, 2000);
+      } catch (error) {
+        if (error.name === 'AbortError' || !isCurrentLoginAttempt(loginAttempt)) return;
+        status.textContent = '连接暂时不稳定，正在重试…';
+      }
+      if (isCurrentLoginAttempt(loginAttempt)) {
+        qrPollTimer = setTimeout(pollQrStatus, 2000);
+      }
+    };
+    qrPollTimer = setTimeout(pollQrStatus, 2000);
 
   } catch (err) {
-    status.textContent = '网络错误: ' + err.message;
+    if (err.name !== 'AbortError' && isCurrentLoginAttempt(loginAttempt)) {
+      status.textContent = '网络错误: ' + err.message;
+    }
   }
 }
 
@@ -4891,18 +7400,22 @@ function switchLoginTab(tab) {
   if (tab === 'qr') {
     startQrLogin();
   } else {
-    clearInterval(qrPollTimer);
+    invalidateLoginAttempt();
+    clearQrLoginSchedule();
     document.getElementById('phone-status').textContent = '';
   }
+}
+
+function closeLoginModal() {
+  invalidateLoginAttempt();
+  clearQrLoginSchedule();
+  document.getElementById('qr-modal').classList.add('hidden');
 }
 
 document.getElementById('login-btn').addEventListener('click', () => openLoginModal('qr'));
 document.getElementById('tab-qr').addEventListener('click',    () => switchLoginTab('qr'));
 document.getElementById('tab-phone').addEventListener('click', () => switchLoginTab('phone'));
-document.getElementById('qr-close').addEventListener('click', () => {
-  clearInterval(qrPollTimer);
-  document.getElementById('qr-modal').classList.add('hidden');
-});
+document.getElementById('qr-close').addEventListener('click', closeLoginModal);
 
 // ── Phone / password login ──────────────────────────────────────────
 document.getElementById('phone-submit').addEventListener('click', async () => {
@@ -4910,24 +7423,47 @@ document.getElementById('phone-submit').addEventListener('click', async () => {
   const password = document.getElementById('password-input').value;
   const statusEl = document.getElementById('phone-status');
   if (!phone || !password) { statusEl.textContent = '请填写手机号和密码'; return; }
+  const submit = document.getElementById('phone-submit');
+  const loginAttempt = beginLoginAttempt();
+  clearQrLoginSchedule();
+  submit.disabled = true;
   statusEl.textContent = '登录中...';
   try {
     const data = await api(
-      `/login/cellphone?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}&timestamp=${Date.now()}`
+      `/login/cellphone?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}&timestamp=${Date.now()}`,
+      {
+        includeSession: false,
+        signal: loginAttempt.controller.signal,
+        timeoutMs: 16000,
+      },
     );
+    if (!isCurrentLoginAttempt(loginAttempt)) return;
     if (data.code === 200 || data.profile) {
-      if (data.cookie) {
-        sessionCookie = cleanCookieString(data.cookie);
-        localStorage.setItem('netease_cookie', sessionCookie);
+      const pendingCookie = cleanCookieString(String(data.cookie || ''));
+      if (!pendingCookie) {
+        statusEl.textContent = '登录响应缺少会话，请重试';
+        return;
+      }
+      const directUid = data.profile?.userId ?? data.account?.id ?? null;
+      const resolvedUid = directUid == null
+        ? await resolveLoginUid(pendingCookie, loginAttempt)
+        : String(directUid);
+      if (!isCurrentLoginAttempt(loginAttempt)) return;
+      if (!resolvedUid || !commitLoginSession(pendingCookie, resolvedUid, loginAttempt)) {
+        statusEl.textContent = '账号确认失败，请重试';
+        return;
       }
       document.getElementById('qr-modal').classList.add('hidden');
-      markLoggedIn(data.profile?.userId ?? data.account?.id ?? null);
       showToast('登录成功，已解锁完整曲库 🎵');
     } else {
       statusEl.textContent = data.message || '账号或密码错误，请重试';
     }
   } catch (e) {
-    statusEl.textContent = '登录失败：' + e.message;
+    if (e.name !== 'AbortError' && isCurrentLoginAttempt(loginAttempt)) {
+      statusEl.textContent = '登录失败：' + e.message;
+    }
+  } finally {
+    if (isCurrentLoginAttempt(loginAttempt)) submit.disabled = false;
   }
 });
 

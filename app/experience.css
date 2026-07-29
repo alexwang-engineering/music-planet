@@ -1,0 +1,2787 @@
+/*
+ * Nebula experience layer
+ *
+ * Load this file after the inline stylesheet in index.html.
+ *
+ * Motion contract
+ * ----------------
+ * - Add `.motion-running` only for the lifetime of an element's transition.
+ *   Remove it on `transitionend` (with a timeout fallback).
+ * - Add `.motion-layout` to <body>, then set `data-layout-mode` to `browse`
+ *   or `immersive`. While switching, briefly add `.layout-is-transitioning`.
+ * - Use `.motion-view` with `data-motion-state="enter|active|exit"` for
+ *   interruptible view changes.
+ * - Add `.motion-popover` / `.motion-dialog` to existing overlays before
+ *   relying on animated `.hidden` states.
+ * - Set `--motion-order` on rows when a short, capped entrance stagger is
+ *   useful. Do not stagger long lists.
+ *
+ * CSS motion follows the compositor wherever practical. The WebGL rendering
+ * cadence itself remains owned by requestAnimationFrame in index.html; CSS
+ * cannot force a 120 Hz display mode.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Timing scale from the Nebula implementation plan. */
+  --motion-instant: 120ms;
+  --motion-fast: 160ms;
+  --motion-toggle: 220ms;
+  --motion-normal: 260ms;
+  --motion-panel-enter: 300ms;
+  --motion-panel-exit: 200ms;
+  --motion-view: 340ms;
+  --motion-lyric: 320ms;
+  --motion-scroll: 420ms;
+  --motion-layout: 480ms;
+  --motion-slow: 420ms;
+  --motion-theme: 650ms;
+  --motion-toast-enter: 240ms;
+  --motion-toast-exit: 200ms;
+  --motion-reduced: 70ms;
+
+  /* Easings are deliberately non-bouncy for spatial navigation. */
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --ease-linear: linear;
+
+  --motion-distance-xs: 2px;
+  --motion-distance-sm: 8px;
+  --motion-distance-md: 18px;
+  --motion-distance-panel: 28px;
+  --motion-press-scale: 0.95;
+  --motion-hover-scale: 1.035;
+
+  /* Read-only performance budget contract for diagnostics in index.html. */
+  --target-ui-fps: 90;
+  --target-visual-fps: 120;
+  --ui-frame-budget: 11.111ms;
+  --visual-frame-budget: 8.333ms;
+
+  --focus-ring-color: var(--accent2, #b070ff);
+  --focus-ring-shadow: 0 0 0 3px var(--accent-glow, rgba(122, 44, 255, 0.28));
+
+  /* JS may tune these during browse/immersive transitions. */
+  --nebula-visual-x: 0px;
+  --nebula-visual-y: 0px;
+  --nebula-visual-scale: 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* High-refresh compositing baseline                                           */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * A WebGL canvas is already compositor-backed. Keeping `will-change` on it
+ * forever reserves another large layer, so override the legacy declaration.
+ * `.motion-running` opts an element in only while CSS is moving it.
+ */
+#three-canvas,
+#liquid-canvas {
+  display: block;
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  will-change: auto;
+  backface-visibility: hidden;
+}
+
+#three-canvas.visual-is-active,
+#liquid-canvas.visual-is-active {
+  opacity: 1;
+}
+
+body.visual-is-switching #three-canvas,
+body.visual-is-switching #liquid-canvas {
+  will-change: transform, opacity;
+}
+
+/*
+ * Opt-in containment for the continuously redrawn center surface. This does
+ * not set cadence; requestAnimationFrame must still render every display tick
+ * and normalize all motion by delta time.
+ */
+body.visual-high-refresh #three-canvas,
+body.visual-high-refresh #liquid-canvas {
+  contain: strict;
+}
+
+/*
+ * Compositor-driven ambient bloom. JavaScript updates only opacity/scale at a
+ * low cadence; the expensive full-screen gradient itself stays cached.
+ */
+#ambient-bloom {
+  position: fixed;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 58vmin;
+  height: 58vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(var(--ambient-rgb, 122, 44, 255), 0.72) 0%,
+    rgba(var(--ambient-rgb, 122, 44, 255), 0.24) 42%,
+    rgba(var(--ambient-rgb, 122, 44, 255), 0) 72%
+  );
+  opacity: var(--ambient-opacity, 0.12);
+  transform:
+    translate3d(-50%, -50%, 0)
+    scale(var(--ambient-scale, 1));
+  transform-origin: center;
+}
+
+#bg-gradient {
+  z-index: 2;
+}
+
+.motion-running {
+  will-change: transform, opacity;
+}
+
+.motion-running.motion-opacity-only {
+  will-change: opacity;
+}
+
+.motion-running.motion-transform-only {
+  will-change: transform;
+}
+
+/*
+ * Progress, volume and tuner values must track the pointer immediately.
+ * These properties are intentionally excluded from the general motion scale.
+ */
+#progress-fill,
+#volume-slider,
+.tuner-row input[type="range"],
+.metric-bar {
+  touch-action: none;
+}
+
+#progress-fill {
+  transition: none;
+}
+
+/*
+ * The legacy equalizer animates `height`, which forces layout every frame.
+ * Preserve the same 14 px footprint and animate scale on the compositor.
+ */
+.eq-icon span,
+.eq-bar {
+  height: 14px;
+  transform: scaleY(0.35);
+  transform-origin: center bottom;
+}
+
+.eq-icon span:nth-child(1) {
+  height: 14px;
+  animation: nebula-eq-a 0.9s ease-in-out infinite;
+}
+
+.eq-icon span:nth-child(2) {
+  height: 14px;
+  animation: nebula-eq-b 0.75s ease-in-out infinite 0.12s;
+}
+
+.eq-icon span:nth-child(3) {
+  height: 14px;
+  animation: nebula-eq-c 0.85s ease-in-out infinite 0.24s;
+}
+
+.eq-bar {
+  animation: nebula-eq-bar 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes nebula-eq-a {
+  0%,
+  100% {
+    transform: scaleY(0.22);
+  }
+  40% {
+    transform: scaleY(0.86);
+  }
+  70% {
+    transform: scaleY(0.36);
+  }
+}
+
+@keyframes nebula-eq-b {
+  0%,
+  100% {
+    transform: scaleY(0.58);
+  }
+  25% {
+    transform: scaleY(0.16);
+  }
+  60% {
+    transform: scaleY(0.94);
+  }
+}
+
+@keyframes nebula-eq-c {
+  0%,
+  100% {
+    transform: scaleY(0.36);
+  }
+  50% {
+    transform: scaleY(0.8);
+  }
+  80% {
+    transform: scaleY(0.22);
+  }
+}
+
+@keyframes nebula-eq-bar {
+  from {
+    transform: scaleY(0.22);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/*
+ * Optional metric contract for index.html: write a unitless
+ * `--metric-level` (0..1) instead of mutating width.
+ */
+.metrics-composited .metric-bar {
+  width: 100%;
+  transform: scaleX(var(--metric-level, 0));
+  transform-origin: center left;
+  transition: transform 80ms linear;
+}
+
+#progress-bar-wrap {
+  height: 28px;
+}
+
+.progress-track {
+  overflow: hidden;
+  transform: translate3d(0, 0, 0) scaleY(1);
+  transform-origin: center;
+  transition: transform var(--motion-fast) var(--ease-enter);
+}
+
+#progress-bar-wrap:hover .progress-track,
+#progress-bar-wrap:focus-within .progress-track {
+  transform: translate3d(0, 0, 0) scaleY(1.55);
+}
+
+#progress-fill {
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: center left;
+  transition: none;
+}
+
+body.body-playing #progress-fill {
+  will-change: transform;
+}
+
+#progress-fill::after {
+  content: none;
+}
+
+#progress-tooltip,
+#progress-tooltip.hidden {
+  display: block;
+  left: 0;
+  visibility: visible;
+  opacity: 1;
+  transform:
+    translate3d(var(--progress-tooltip-x, 0px), 0, 0)
+    translateX(-50%);
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#progress-tooltip.hidden {
+  visibility: hidden;
+  opacity: 0;
+  transform:
+    translate3d(
+      var(--progress-tooltip-x, 0px),
+      var(--motion-distance-xs),
+      0
+    )
+    translateX(-50%);
+  transition:
+    transform var(--motion-fast) var(--ease-exit),
+    opacity var(--motion-fast) var(--ease-exit),
+    visibility 0s linear var(--motion-fast);
+}
+
+/* The two new utility controls need a little more room than the legacy bar. */
+.bar-right {
+  width: 220px;
+  gap: 12px;
+}
+
+.volume-wrap {
+  min-width: 100px;
+}
+
+#btn-mute {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+#btn-mute.active {
+  color: var(--accent2);
+}
+
+#btn-settings,
+#btn-queue {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+#btn-settings.active,
+#btn-queue.active {
+  color: var(--accent2);
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Existing controls                                                           */
+/* -------------------------------------------------------------------------- */
+
+.ctrl-btn,
+.panel-tab,
+#login-btn,
+#tuner-reset,
+#queue-close,
+#back-to-playlists,
+.login-tab,
+#phone-submit,
+#qr-close,
+.visual-option {
+  transform: translate3d(0, 0, 0);
+  transform-origin: center;
+  transition-property: transform, opacity, color, background-color, border-color;
+  transition-duration:
+    var(--motion-instant),
+    var(--motion-fast),
+    var(--motion-fast),
+    var(--motion-fast),
+    var(--motion-fast);
+  transition-timing-function: var(--ease-enter);
+}
+
+.ctrl-btn > svg,
+.visual-option > svg,
+.ctx-item > svg {
+  transform: translate3d(0, 0, 0);
+  transform-origin: center;
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ctrl-btn:not(:disabled):hover,
+  #login-btn:not(:disabled):hover,
+  #tuner-reset:not(:disabled):hover,
+  #queue-close:not(:disabled):hover,
+  #back-to-playlists:not(:disabled):hover,
+  .login-tab:not(:disabled):hover,
+  #phone-submit:not(:disabled):hover,
+  #qr-close:not(:disabled):hover,
+  .visual-option:not(:disabled):hover {
+    transform: translate3d(0, -1px, 0);
+  }
+
+  .ctrl-btn:not(:disabled):hover > svg,
+  .visual-option:not(:disabled):hover > svg {
+    transform: translate3d(0, 0, 0) scale(var(--motion-hover-scale));
+  }
+}
+
+.ctrl-btn:not(:disabled):active,
+#login-btn:not(:disabled):active,
+#tuner-reset:not(:disabled):active,
+#queue-close:not(:disabled):active,
+#back-to-playlists:not(:disabled):active,
+.panel-tab:not(:disabled):active,
+.login-tab:not(:disabled):active,
+#phone-submit:not(:disabled):active,
+#qr-close:not(:disabled):active,
+.visual-option:not(:disabled):active {
+  transform: translate3d(0, 0, 0) scale(var(--motion-press-scale));
+  transition-duration: var(--motion-instant);
+}
+
+:is(
+    .ctrl-btn,
+    .panel-tab,
+    #login-btn,
+    #tuner-reset,
+    #queue-close,
+    #back-to-playlists,
+    .login-tab,
+    #phone-submit,
+    #qr-close,
+    .visual-option
+  ):disabled {
+  cursor: default;
+  opacity: 0.38;
+  transform: none;
+}
+
+/* Keep the primary control tactile without animating its painted glow. */
+#btn-play-pause {
+  transition-property: transform, opacity, color, background-color, border-color;
+}
+
+#btn-play-pause:hover {
+  filter: none;
+}
+
+#btn-shuffle,
+#btn-repeat,
+#btn-visual {
+  transition-property: transform, opacity, color;
+}
+
+#btn-like {
+  transition:
+    transform var(--motion-instant) var(--ease-spring),
+    color var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #btn-like:hover {
+    transform: translate3d(0, -1px, 0) scale(1.08);
+  }
+}
+
+#btn-like.liked > [data-motion-icon][aria-hidden="false"] {
+  animation: nebula-heart-confirm var(--motion-toggle) var(--ease-spring);
+}
+
+.bar-song-info {
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-exit);
+}
+
+.bar-song-info.fade-out {
+  transform: translate3d(0, var(--motion-distance-xs), 0);
+}
+
+@keyframes nebula-heart-confirm {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.45;
+  }
+  62% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * Optional icon crossfade. Add `.motion-icon-swap` to a button and toggle
+ * `aria-hidden` instead of `display` on children carrying `data-motion-icon`.
+ */
+.motion-icon-swap {
+  display: grid;
+  place-items: center;
+}
+
+.motion-icon-swap > [data-motion-icon] {
+  grid-area: 1 / 1;
+  display: block !important;
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.motion-icon-swap > [data-motion-icon][aria-hidden="true"] {
+  transform: translate3d(0, 0, 0) scale(0.72);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#btn-layout[data-layout-mode="browse"] [data-layout-icon="browse"],
+#btn-layout[data-layout-mode="immersive"] [data-layout-icon="immersive"] {
+  transform: translate3d(0, 0, 0) scale(0.72);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#btn-layout.active {
+  color: var(--accent2);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Focus visibility                                                            */
+/* -------------------------------------------------------------------------- */
+
+:is(
+    button,
+    input,
+    [role="button"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 3px;
+  box-shadow: var(--focus-ring-shadow);
+}
+
+#search-input:focus-visible,
+.login-field:focus-visible {
+  outline-offset: 2px;
+}
+
+:is(.song-item, .my-playlist-item, .queue-item, .ctx-item):focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/* Range thumbs need their own visible focus treatment in Chromium. */
+#volume-slider:focus-visible,
+.tuner-row input[type="range"]:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 5px;
+  box-shadow: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Search, playlist and queue rows                                             */
+/* -------------------------------------------------------------------------- */
+
+.song-item,
+.my-playlist-item,
+.queue-item,
+.ctx-item {
+  transform: translate3d(0, 0, 0);
+  transform-origin: center;
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter);
+}
+
+.queue-item {
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.queue-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .song-item:not(.unplayable):hover,
+  .my-playlist-item:hover,
+  .queue-item:hover {
+    transform: translate3d(var(--motion-distance-xs), 0, 0);
+  }
+
+  .ctx-item:hover {
+    transform: translate3d(1px, 0, 0);
+  }
+
+  :is(.song-item, .my-playlist-item):hover :is(.song-thumb, .pl-icon img) {
+    transform: scale(1.035);
+  }
+}
+
+:is(.song-item, .my-playlist-item, .queue-item, .ctx-item):active {
+  transform: translate3d(0, 0, 0) scale(0.992);
+}
+
+.song-item.unplayable {
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+.song-thumb,
+.song-art,
+.my-playlist-item .pl-icon img {
+  transform: scale(1);
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.song-item.active::before {
+  transform: scaleY(1);
+  transform-origin: center left;
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+/*
+ * Short list entrance. Cap --motion-order at 8 in JS; large playlists should
+ * render without a stagger so input and scrolling are never delayed.
+ */
+.motion-list-enter > :is(.song-item, .my-playlist-item, .queue-item) {
+  animation: nebula-row-enter var(--motion-normal) var(--ease-enter) both;
+  animation-delay: calc(var(--motion-order, 0) * 18ms);
+}
+
+@keyframes nebula-row-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-sm), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+#search-filters {
+  min-height: 34px;
+  padding: 0 10px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+#search-filters::-webkit-scrollbar {
+  display: none;
+}
+
+#search-types {
+  min-height: 32px;
+  margin: 0 10px 7px;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(4, 4, 12, 0.22);
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+#search-types.types-hidden {
+  visibility: hidden;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, calc(-1 * var(--motion-distance-xs)), 0);
+}
+
+.search-type {
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font: 650 10px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-toggle) var(--ease-enter),
+    background-color var(--motion-toggle) var(--ease-enter),
+    box-shadow var(--motion-toggle) var(--ease-enter);
+}
+
+.search-type:hover {
+  color: rgba(255, 255, 255, 0.78);
+  transform: translate3d(0, -1px, 0);
+}
+
+.search-type:active {
+  transform: translate3d(0, 0, 0) scale(0.96);
+}
+
+.search-type.active {
+  color: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.14);
+}
+
+.search-type:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+#search-filters.filters-hidden {
+  visibility: hidden;
+  min-height: 0;
+  height: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, calc(-1 * var(--motion-distance-xs)), 0);
+}
+
+.search-filter {
+  min-height: 24px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.46);
+  font: 600 10px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-toggle) var(--ease-enter),
+    border-color var(--motion-toggle) var(--ease-enter),
+    background-color var(--motion-toggle) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.search-filter:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.82);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translate3d(0, -1px, 0);
+}
+
+.search-filter:active:not(:disabled) {
+  transform: translate3d(0, 0, 0) scale(0.96);
+}
+
+.search-filter.active {
+  color: var(--accent2);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.search-filter:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.search-filter:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.entity-nav {
+  min-height: 0;
+  height: 0;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  transform: translate3d(calc(-1 * var(--motion-distance-sm)), 0, 0);
+  transition:
+    height var(--motion-normal) var(--ease-move),
+    min-height var(--motion-normal) var(--ease-move),
+    padding var(--motion-normal) var(--ease-move),
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    visibility 0s linear var(--motion-normal);
+}
+
+.entity-nav.visible {
+  min-height: 48px;
+  height: 48px;
+  padding: 4px 12px 8px;
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition-delay: 0s;
+}
+
+#entity-back {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  font: 650 16px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    border-color var(--motion-fast) var(--ease-enter);
+}
+
+#entity-back:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  transform: translate3d(-1px, 0, 0);
+}
+
+#entity-back:active {
+  transform: translate3d(0, 0, 0) scale(0.94);
+}
+
+.entity-nav-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.entity-nav-kicker {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+#entity-nav-title {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-card {
+  min-height: 72px;
+  width: 100%;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.entity-card:hover {
+  background: rgba(255, 255, 255, 0.055);
+  transform: translate3d(3px, 0, 0);
+}
+
+.entity-card:active {
+  transform: translate3d(1px, 0, 0) scale(0.992);
+}
+
+.entity-card:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -3px;
+}
+
+.entity-card-image,
+.entity-card-placeholder {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+}
+
+.entity-card[data-entity-type="artist"] .entity-card-image,
+.entity-card[data-entity-type="artist"] .entity-card-placeholder {
+  border-radius: 50%;
+}
+
+.entity-card-image {
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.entity-card-placeholder {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 30% 25%, var(--accent-glow), transparent 58%),
+    rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 18px;
+}
+
+.entity-card-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.entity-card-title {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-card-subtitle,
+.entity-card-meta {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-card-meta {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.entity-card-chevron {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.26);
+  font-size: 16px;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter);
+}
+
+.entity-card:hover .entity-card-chevron {
+  color: rgba(255, 255, 255, 0.6);
+  transform: translate3d(2px, 0, 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Playlist library                                                            */
+/* -------------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.playlist-library-shell {
+  min-height: 100%;
+}
+
+.playlist-library-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  padding: 10px 10px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 7px;
+  background:
+    linear-gradient(180deg, rgba(8, 5, 18, 0.99), rgba(8, 5, 18, 0.94));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.playlist-library-search {
+  position: relative;
+  min-width: 0;
+}
+
+.playlist-library-search svg {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+#playlist-library-query,
+#playlist-library-sort {
+  width: 100%;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.78);
+  font: 500 10px/1 -apple-system, "SF Pro Text", sans-serif;
+  transition:
+    border-color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter);
+}
+
+#playlist-library-query {
+  padding: 0 9px 0 28px;
+}
+
+#playlist-library-sort {
+  padding: 0 24px 0 9px;
+  cursor: pointer;
+}
+
+#playlist-library-query:focus,
+#playlist-library-sort:focus {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.playlist-library-summary {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  padding: 1px 2px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.playlist-library-summary strong {
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 650;
+}
+
+#playlist-library-refresh {
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font: 650 9px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+#playlist-library-refresh:hover {
+  color: rgba(255, 255, 255, 0.8);
+  transform: translate3d(0, -1px, 0);
+}
+
+#playlist-library-refresh:active {
+  transform: translate3d(0, 0, 0) scale(var(--motion-press-scale));
+}
+
+#playlist-library-refresh:disabled {
+  cursor: default;
+  opacity: 0.45;
+  transform: none;
+}
+
+#playlist-library-content {
+  min-height: 120px;
+}
+
+.playlist-group {
+  padding-bottom: 7px;
+}
+
+.playlist-group-header {
+  min-height: 30px;
+  padding: 9px 14px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.43);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.playlist-group-count {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9px;
+  text-align: center;
+}
+
+#mylist-wrap .my-playlist-item {
+  position: relative;
+  width: calc(100% - 12px);
+  min-height: 64px;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+#mylist-wrap .my-playlist-item.active::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 2px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+#mylist-wrap .my-playlist-item .pl-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+#mylist-wrap .my-playlist-item .pl-info,
+#mylist-wrap .my-playlist-item .pl-name,
+#mylist-wrap .my-playlist-item .pl-meta-row {
+  display: flex;
+}
+
+#mylist-wrap .my-playlist-item .pl-info {
+  flex-direction: column;
+}
+
+#mylist-wrap .my-playlist-item .pl-name {
+  display: block;
+}
+
+.pl-meta-row {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+}
+
+.pl-creator {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-meta-separator {
+  width: 2px;
+  height: 2px;
+  flex: 0 0 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.playlist-list-state {
+  min-height: 180px;
+  padding: 28px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.playlist-list-state.skeleton-shimmer {
+  min-height: 360px;
+  padding: 8px 0 20px;
+  gap: 0;
+}
+
+.playlist-list-state small {
+  max-width: 220px;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.playlist-retry {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.7);
+  font: 600 10px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    border-color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+.playlist-retry:hover {
+  color: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.09);
+  transform: translate3d(0, -1px, 0);
+}
+
+.playlist-retry:active {
+  transform: translate3d(0, 0, 0) scale(var(--motion-press-scale));
+}
+
+.playlist-track-header {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(8, 5, 18, 0.975);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.playlist-track-header #back-to-playlists {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.playlist-track-title {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 11px;
+  font-weight: 630;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-track-count {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.playlist-track-list {
+  min-height: 120px;
+  padding-bottom: 8px;
+}
+
+.entity-detail-hero {
+  margin: 4px 12px 8px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, var(--accent-glow), transparent 65%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.entity-detail-hero .entity-card-image,
+.entity-detail-hero .entity-card-placeholder {
+  width: 58px;
+  height: 58px;
+}
+
+.entity-detail-hero[data-entity-type="artist"] .entity-card-image,
+.entity-detail-hero[data-entity-type="artist"] .entity-card-placeholder {
+  border-radius: 50%;
+}
+
+.entity-detail-title {
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-detail-subtitle {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-detail-count {
+  padding: 6px 14px 5px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.motion-list-enter > .entity-card {
+  animation: nebula-row-enter var(--motion-normal) var(--ease-enter) both;
+  animation-delay:
+    min(
+      calc(var(--motion-order, 0) * 24ms),
+      192ms
+    );
+}
+
+body.entity-nav-forward::view-transition-old(nebula-content) {
+  animation: nebula-entity-forward-old var(--motion-panel-exit) var(--ease-exit) both;
+}
+
+body.entity-nav-forward::view-transition-new(nebula-content) {
+  animation: nebula-entity-forward-new var(--motion-view) var(--ease-enter) both;
+}
+
+body.entity-nav-back::view-transition-old(nebula-content) {
+  animation: nebula-entity-back-old var(--motion-panel-exit) var(--ease-exit) both;
+}
+
+body.entity-nav-back::view-transition-new(nebula-content) {
+  animation: nebula-entity-back-new var(--motion-view) var(--ease-enter) both;
+}
+
+@keyframes nebula-entity-forward-old {
+  to {
+    opacity: 0;
+    transform: translate3d(calc(-1 * var(--motion-distance-sm)), 0, 0);
+  }
+}
+
+@keyframes nebula-entity-forward-new {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--motion-distance-md), 0, 0);
+  }
+}
+
+@keyframes nebula-entity-back-old {
+  to {
+    opacity: 0;
+    transform: translate3d(var(--motion-distance-sm), 0, 0);
+  }
+}
+
+@keyframes nebula-entity-back-new {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(-1 * var(--motion-distance-md)), 0, 0);
+  }
+}
+
+.search-result-summary {
+  padding: 10px 14px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.search-result-summary strong {
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 650;
+}
+
+.song-name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.song-name-row .song-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-badge {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.song-badge.variant {
+  border-color: var(--accent-glow);
+  color: var(--accent2);
+}
+
+.song-badge.sources {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/* FLIP contract: set the inverse transform inline, then remove it next frame. */
+.motion-flip {
+  transition: transform var(--motion-normal) var(--ease-move);
+}
+
+.motion-flip.is-measuring {
+  transition: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lyrics                                                                      */
+/* -------------------------------------------------------------------------- */
+
+#lyrics-wrap {
+  padding: 14px 0 20px;
+  scroll-padding-block: 40%;
+}
+
+/*
+ * Do not interpolate font-size/font-weight: both trigger layout and text
+ * rasterization on every frame. Existing active sizes remain intact; emphasis
+ * is eased with compositor-friendly scale/opacity around the state change.
+ */
+.lyric-line {
+  position: relative;
+  padding: 10px 20px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.65;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: center;
+  opacity: 0.76;
+  transition:
+    transform var(--motion-lyric) var(--ease-enter),
+    opacity var(--motion-lyric) var(--ease-enter),
+    color var(--motion-lyric) var(--ease-enter),
+    text-shadow var(--motion-lyric) var(--ease-enter);
+}
+
+.lyric-line.near {
+  color: rgba(255, 255, 255, 0.62);
+  opacity: 0.9;
+}
+
+.lyric-line.active {
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 13px;
+  font-weight: 500;
+  transform: translate3d(0, 0, 0) scale(1.025);
+  opacity: 1;
+}
+
+.lyric-line::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  width: 2px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0;
+  transform: translate3d(-4px, -50%, 0) scaleY(0.6);
+  transition:
+    transform var(--motion-lyric) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.lyric-line.active::before {
+  opacity: 0.78;
+  transform: translate3d(0, -50%, 0) scaleY(1);
+}
+
+.lyric-original {
+  text-wrap: balance;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lyric-line:not(.active):hover {
+    transform: translate3d(0, -1px, 0);
+    opacity: 0.96;
+  }
+}
+
+.lyric-trans {
+  margin-top: 3px;
+  padding: 0 4px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+  line-height: 1.55;
+  opacity: 0.8;
+  transition:
+    opacity var(--motion-lyric) var(--ease-enter),
+    color var(--motion-lyric) var(--ease-enter);
+}
+
+.lyric-line.active .lyric-trans {
+  color: rgba(255, 255, 255, 0.66);
+  opacity: 1;
+}
+
+/*
+ * Add `.lyrics-css-scroll` only when JS uses `scrollTo({ top })`. Existing
+ * `scrollIntoView({ behavior: "smooth" })` already owns its own scroll timing.
+ */
+#lyrics-wrap.lyrics-css-scroll {
+  scroll-behavior: smooth;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Existing panels, toast and overlays                                         */
+/* -------------------------------------------------------------------------- */
+
+.panel {
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    border-color var(--motion-theme) var(--ease-move),
+    background-color var(--motion-theme) var(--ease-move);
+}
+
+#queue-panel {
+  visibility: visible;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-panel-enter) var(--ease-enter),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#queue-panel.hidden {
+  visibility: hidden;
+  transform: translate3d(0, var(--motion-distance-md), 0);
+  transition:
+    transform var(--motion-panel-exit) var(--ease-exit),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-panel-exit);
+}
+
+#toast {
+  max-width: min(520px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px 9px 16px;
+  visibility: hidden;
+  white-space: normal;
+  transform: translate3d(-50%, var(--motion-distance-sm), 0);
+  transition:
+    opacity var(--motion-toast-exit) var(--ease-exit),
+    transform var(--motion-toast-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-toast-exit);
+}
+
+#toast-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#toast-action {
+  max-width: 0;
+  min-height: 30px;
+  padding: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
+  visibility: hidden;
+  border: 0 solid color-mix(in srgb, var(--accent) 44%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 15%, rgba(255, 255, 255, 0.04));
+  color: rgba(255, 255, 255, 0.9);
+  font: 650 11px/1 -apple-system, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(4px, 0, 0) scale(0.96);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    max-width var(--motion-fast) var(--ease-enter),
+    padding var(--motion-fast) var(--ease-enter),
+    border-width var(--motion-fast) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    border-color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    visibility 0s linear var(--motion-fast);
+}
+
+#toast-action[hidden] {
+  display: none;
+}
+
+#toast.is-actionable #toast-action {
+  max-width: 68px;
+  padding: 0 11px;
+  visibility: visible;
+  border-width: 1px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    max-width var(--motion-fast) var(--ease-enter),
+    padding var(--motion-fast) var(--ease-enter),
+    border-width var(--motion-fast) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    border-color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#toast-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 24%, rgba(255, 255, 255, 0.06));
+  transform: translate3d(0, -1px, 0);
+}
+
+#toast-action:active {
+  transform: translate3d(0, 0, 0) scale(var(--motion-press-scale));
+}
+
+#toast.is-actionable #toast-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+#toast.show {
+  visibility: visible;
+  transform: translate3d(-50%, 0, 0);
+  transition:
+    opacity var(--motion-toast-enter) var(--ease-enter),
+    transform var(--motion-toast-enter) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#toast.is-actionable {
+  pointer-events: auto;
+}
+
+/*
+ * Opt-in popover contract. The display override is gated by `.motion-popover`,
+ * so merely linking this stylesheet cannot expose currently hidden panels.
+ */
+#tuner-panel.motion-popover,
+#visual-panel.motion-popover,
+#ctx-menu.motion-popover {
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: bottom right;
+  transition:
+    transform var(--motion-panel-enter) var(--ease-enter),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#tuner-panel.motion-popover.hidden {
+  display: grid;
+}
+
+#visual-panel.motion-popover.hidden {
+  display: flex;
+}
+
+#ctx-menu.motion-popover.hidden {
+  display: block;
+}
+
+#tuner-panel.motion-popover.hidden,
+#visual-panel.motion-popover.hidden,
+#ctx-menu.motion-popover.hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, var(--motion-distance-sm), 0) scale(0.985);
+  transition:
+    transform var(--motion-panel-exit) var(--ease-exit),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-panel-exit);
+}
+
+/*
+ * Opt-in dialog contract. Add `.motion-dialog` to #qr-modal; `.hidden` can then
+ * animate while pointer and focus access are removed immediately.
+ */
+#qr-modal.motion-dialog {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+#qr-modal.motion-dialog #qr-box {
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  transition:
+    transform var(--motion-panel-enter) var(--ease-enter),
+    opacity var(--motion-panel-enter) var(--ease-enter);
+}
+
+#qr-modal.motion-dialog.hidden {
+  display: flex;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-panel-exit);
+}
+
+#qr-modal.motion-dialog.hidden #qr-box {
+  transform: translate3d(0, var(--motion-distance-sm), 0) scale(0.985);
+  opacity: 0;
+  transition:
+    transform var(--motion-panel-exit) var(--ease-exit),
+    opacity var(--motion-panel-exit) var(--ease-exit);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Unified playback and visual settings                                        */
+/* -------------------------------------------------------------------------- */
+
+#settings-panel {
+  position: fixed;
+  z-index: 85;
+  right: 16px;
+  bottom: calc(var(--bar-h) + 18px);
+  width: min(348px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--bar-h) - 52px);
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 82% 0%, var(--accent-glow), transparent 42%),
+    rgba(7, 4, 16, 0.975);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.62),
+    0 1px 0 rgba(255, 255, 255, 0.035) inset;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  contain: layout paint style;
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: bottom right;
+  transition:
+    transform var(--motion-panel-enter) var(--ease-enter),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    visibility 0s linear 0s,
+    border-color var(--motion-theme) var(--ease-move),
+    background-color var(--motion-theme) var(--ease-move);
+}
+
+#settings-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+#settings-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#settings-panel.hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 12px, 0) scale(0.985);
+  transition:
+    transform var(--motion-panel-exit) var(--ease-exit),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-panel-exit),
+    border-color var(--motion-theme) var(--ease-move),
+    background-color var(--motion-theme) var(--ease-move);
+}
+
+.settings-header {
+  min-height: 42px;
+  padding: 1px 2px 9px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-header > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-kicker,
+.settings-section-label {
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+#settings-title {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+#settings-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font: 400 21px/1 -apple-system, "SF Pro Display", sans-serif;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+#settings-close:hover {
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+#settings-close:active {
+  transform: translate3d(0, 0, 0) scale(var(--motion-press-scale));
+}
+
+.settings-section {
+  margin-top: 8px;
+  padding: 7px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.027);
+}
+
+.settings-section-label {
+  padding: 3px 4px 1px;
+}
+
+.setting-row {
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+.setting-row:hover {
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.055);
+  transform: translate3d(2px, 0, 0);
+}
+
+.setting-row:active {
+  transform: translate3d(0, 0, 0) scale(0.992);
+}
+
+.setting-row-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-glow);
+  color: var(--accent2);
+}
+
+.setting-row-icon > svg {
+  grid-area: 1 / 1;
+  display: block !important;
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+.setting-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.setting-row-copy strong {
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.setting-row-copy small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-row-value {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease-enter);
+}
+
+.setting-row.active .setting-row-value {
+  color: var(--accent2);
+}
+
+#settings-panel #btn-sleep {
+  position: relative;
+  width: 100%;
+  height: auto;
+  display: grid;
+  opacity: 1;
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+#settings-panel #sleep-indicator,
+#settings-panel #btn-sleep.active #sleep-indicator {
+  position: static;
+  display: inline;
+  transform: none;
+  pointer-events: none;
+}
+
+.visual-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+#settings-panel .visual-option {
+  width: 100%;
+  min-height: 38px;
+  height: auto;
+  justify-content: center;
+  border: 1px solid transparent;
+}
+
+#settings-panel .visual-option.active {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: var(--accent-glow);
+  color: var(--accent2);
+}
+
+#settings-panel .theme-dots {
+  width: 100%;
+  margin: 0;
+  padding: 4px 3px;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
+  gap: 5px;
+}
+
+#settings-panel .theme-dot {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--swatch);
+}
+
+#settings-panel .theme-dot[data-theme="mix"] {
+  background: conic-gradient(
+    #ff5012,
+    #ff2080,
+    #8030ff,
+    #1870ff,
+    #00c8a0,
+    #00c855,
+    #ffcc00,
+    #ff5012
+  );
+}
+
+#settings-panel .theme-dot.active {
+  border-color: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(7, 4, 16, 0.92),
+    0 0 13px var(--accent-glow);
+}
+
+.settings-disclosure {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font: 620 12px/1 -apple-system, "SF Pro Text", sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+.settings-disclosure:hover {
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.settings-disclosure:active {
+  transform: scale(0.992);
+}
+
+#settings-panel #btn-tuner {
+  width: 100%;
+  height: 38px;
+  opacity: 1;
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+.settings-disclosure-copy {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.settings-chevron {
+  color: rgba(255, 255, 255, 0.42);
+  transform: rotate(0deg);
+  transition:
+    transform var(--motion-toggle) var(--ease-enter),
+    color var(--motion-fast) var(--ease-enter);
+}
+
+.settings-disclosure[aria-expanded="true"] .settings-chevron {
+  color: var(--accent2);
+  transform: rotate(180deg);
+}
+
+#settings-panel #tuner-panel,
+#settings-panel #tuner-panel.hidden {
+  position: static;
+  z-index: auto;
+  right: auto;
+  bottom: auto;
+  width: auto;
+  max-height: 520px;
+  margin: 2px 0 0;
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    max-height var(--motion-view) var(--ease-move),
+    margin var(--motion-normal) var(--ease-move),
+    padding var(--motion-normal) var(--ease-move),
+    border-color var(--motion-normal) var(--ease-enter),
+    transform var(--motion-normal) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter);
+}
+
+#settings-panel #tuner-panel.hidden {
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, -4px, 0);
+}
+
+#settings-panel .tuner-title {
+  margin-bottom: 1px;
+}
+
+#settings-panel .tuner-row {
+  grid-template-columns: 72px minmax(0, 1fr) 38px;
+}
+
+.settings-shortcuts {
+  padding: 11px 5px 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+@media (max-width: 760px) {
+  .bar-right {
+    width: 96px;
+    gap: 6px;
+  }
+
+  .volume-wrap {
+    display: none;
+  }
+
+  #settings-panel {
+    right: 12px;
+    bottom: calc(var(--bar-h) + 14px);
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - var(--bar-h) - 38px);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Theme controls                                                              */
+/* -------------------------------------------------------------------------- */
+
+.theme-dot {
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: center;
+  transition:
+    transform var(--motion-fast) var(--ease-spring),
+    opacity var(--motion-fast) var(--ease-enter),
+    border-color var(--motion-toggle) var(--ease-enter),
+    box-shadow var(--motion-toggle) var(--ease-enter);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .theme-dot:hover {
+    transform: translate3d(0, 0, 0) scale(1.24);
+  }
+}
+
+.theme-dot.active {
+  transform: translate3d(0, 0, 0) scale(1.14);
+}
+
+.theme-dot:active {
+  transform: translate3d(0, 0, 0) scale(0.92);
+  transition-duration: var(--motion-instant);
+}
+
+/*
+ * Optional, bounded theme handoff. Apply `.theme-is-transitioning` for
+ * --motion-theme after changing the theme variables, then remove it.
+ */
+.theme-is-transitioning .panel {
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    border-color var(--motion-theme) var(--ease-move),
+    background-color var(--motion-theme) var(--ease-move);
+}
+
+.theme-is-transitioning :is(.ctrl-btn, .panel-tab) {
+  transition:
+    transform var(--motion-instant) var(--ease-enter),
+    opacity var(--motion-fast) var(--ease-enter),
+    color var(--motion-theme) var(--ease-move),
+    background-color var(--motion-theme) var(--ease-move),
+    border-color var(--motion-theme) var(--ease-move);
+}
+
+.theme-is-transitioning :is(
+    .song-item.active .song-name,
+    .queue-item.current .q-name
+  ) {
+  transition: color var(--motion-theme) var(--ease-move);
+}
+
+.theme-is-transitioning .lyric-line.active {
+  transition:
+    transform var(--motion-lyric) var(--ease-enter),
+    opacity var(--motion-lyric) var(--ease-enter),
+    color var(--motion-theme) var(--ease-move),
+    text-shadow var(--motion-theme) var(--ease-move);
+}
+
+/* -------------------------------------------------------------------------- */
+/* View transition helpers                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* Do not snapshot the WebGL-backed whole page for a content-only transition. */
+:root {
+  view-transition-name: none;
+}
+
+.motion-view {
+  --motion-view-x: 0px;
+  visibility: visible;
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  transition:
+    transform var(--motion-view) var(--ease-enter),
+    opacity var(--motion-view) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+.motion-view[data-motion-direction="forward"] {
+  --motion-view-x: var(--motion-distance-md);
+  --motion-view-exit-x: calc(0px - var(--motion-distance-sm));
+}
+
+.motion-view[data-motion-direction="back"] {
+  --motion-view-x: calc(0px - var(--motion-distance-md));
+  --motion-view-exit-x: var(--motion-distance-sm);
+}
+
+.motion-view[data-motion-state="enter"] {
+  transform: translate3d(var(--motion-view-x), 0, 0);
+  opacity: 0;
+}
+
+.motion-view[data-motion-state="active"] {
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+}
+
+.motion-view[data-motion-state="exit"] {
+  visibility: hidden;
+  transform: translate3d(var(--motion-view-exit-x, 0px), 0, 0);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--motion-panel-exit) var(--ease-exit),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-panel-exit);
+}
+
+/* Add each name to only one live element at a time. */
+.view-transition-root {
+  view-transition-name: nebula-root;
+}
+
+.view-transition-content {
+  view-transition-name: nebula-content;
+}
+
+.view-transition-player {
+  view-transition-name: nebula-player;
+}
+
+.view-transition-art {
+  view-transition-name: nebula-art;
+}
+
+::view-transition-group(nebula-root),
+::view-transition-group(nebula-content),
+::view-transition-group(nebula-player),
+::view-transition-group(nebula-art) {
+  animation-duration: var(--motion-view);
+  animation-timing-function: var(--ease-move);
+}
+
+::view-transition-old(nebula-root),
+::view-transition-old(nebula-content),
+::view-transition-old(nebula-player),
+::view-transition-old(nebula-art) {
+  animation: nebula-view-old var(--motion-view) var(--ease-exit) both;
+}
+
+::view-transition-new(nebula-root),
+::view-transition-new(nebula-content),
+::view-transition-new(nebula-player),
+::view-transition-new(nebula-art) {
+  animation: nebula-view-new var(--motion-view) var(--ease-enter) both;
+}
+
+@keyframes nebula-view-old {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.992);
+  }
+}
+
+@keyframes nebula-view-new {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-sm), 0) scale(0.992);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Browse / immersive layout helpers                                           */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Opt in with:
+ *   <body class="motion-layout" data-layout-mode="browse">
+ * During a mode switch add `.layout-is-transitioning` for --motion-layout.
+ * Only transform and opacity animate; JS can update the visual CSS variables
+ * above or interpolate the Three.js camera without animating panel geometry.
+ */
+body.motion-layout #left-panel,
+body.motion-layout #right-panel {
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-enter) var(--ease-enter),
+    visibility 0s linear 0s;
+}
+
+body.motion-layout[data-layout-mode="browse"] {
+  --left-w: 300px;
+  --right-w: 280px;
+  --nebula-visual-scale: 0.97;
+}
+
+body.motion-layout #three-canvas,
+body.motion-layout #liquid-canvas,
+body.motion-layout #bg-gradient {
+  transform:
+    translate3d(var(--nebula-visual-x), var(--nebula-visual-y), 0)
+    scale(var(--nebula-visual-scale));
+  transform-origin: center;
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-enter) var(--ease-enter);
+}
+
+body.motion-layout[data-layout-mode="immersive"] #left-panel {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(calc(-100% - var(--motion-distance-panel)), 0, 0);
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-layout);
+}
+
+body.motion-layout[data-layout-mode="immersive"] #right-panel {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(calc(100% + var(--motion-distance-panel)), 0, 0);
+  transition:
+    transform var(--motion-layout) var(--ease-move),
+    opacity var(--motion-panel-exit) var(--ease-exit),
+    visibility 0s linear var(--motion-layout);
+}
+
+body.motion-layout[data-layout-mode="immersive"] {
+  --nebula-visual-scale: 1.035;
+}
+
+body.motion-layout.layout-is-transitioning #left-panel,
+body.motion-layout.layout-is-transitioning #right-panel,
+body.motion-layout.layout-is-transitioning #three-canvas,
+body.motion-layout.layout-is-transitioning #liquid-canvas,
+body.motion-layout.layout-is-transitioning #bg-gradient {
+  will-change: transform, opacity;
+}
+
+.panel-resizer {
+  position: absolute;
+  z-index: 12;
+  top: 46px;
+  bottom: 12px;
+  width: 10px;
+  border-radius: 999px;
+  cursor: col-resize;
+  opacity: 0;
+  touch-action: none;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+#left-panel-resizer {
+  right: 0;
+}
+
+#right-panel-resizer {
+  left: 0;
+}
+
+.panel-resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  transform: translate3d(-50%, -50%, 0) scaleY(0.72);
+  transition:
+    transform var(--motion-fast) var(--ease-enter),
+    background-color var(--motion-fast) var(--ease-enter);
+}
+
+:is(#left-panel, #right-panel):hover > .panel-resizer,
+.panel-resizer:focus-visible,
+body.panel-is-resizing .panel-resizer {
+  opacity: 1;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer:focus-visible::after,
+body.panel-is-resizing .panel-resizer::after {
+  background: var(--accent2);
+  transform: translate3d(-50%, -50%, 0) scaleY(1);
+}
+
+body.panel-is-resizing,
+body.panel-is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Loading and skeleton primitives                                             */
+/* -------------------------------------------------------------------------- */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  color: transparent;
+  background: rgba(255, 255, 255, 0.075);
+  border-color: transparent;
+  border-radius: 7px;
+}
+
+.skeleton-line {
+  display: block;
+  width: var(--skeleton-width, 100%);
+  height: var(--skeleton-height, 0.72em);
+  min-height: 8px;
+  border-radius: 999px;
+}
+
+.skeleton-line + .skeleton-line {
+  margin-top: var(--skeleton-gap, 8px);
+}
+
+.skeleton-art {
+  display: block;
+  width: var(--skeleton-art-size, 38px);
+  height: var(--skeleton-art-size, 38px);
+  flex: 0 0 var(--skeleton-art-size, 38px);
+  border-radius: var(--skeleton-art-radius, 8px);
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--skeleton-row-height, 60px);
+  padding: 0 14px;
+}
+
+.skeleton-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton-stack {
+  display: grid;
+}
+
+.skeleton-stack > * {
+  grid-area: 1 / 1;
+}
+
+/*
+ * Put `.skeleton-shimmer` on one containing region, not on every row. A single
+ * translated overlay is cheaper than repainting a gradient per list item.
+ */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.075),
+    rgba(255, 255, 255, 0.14),
+    rgba(255, 255, 255, 0.075),
+    transparent
+  );
+  transform: translate3d(-145%, 0, 0) skewX(-10deg);
+  animation: nebula-skeleton-sweep 1.45s var(--ease-enter) infinite;
+}
+
+@keyframes nebula-skeleton-sweep {
+  to {
+    transform: translate3d(345%, 0, 0) skewX(-10deg);
+  }
+}
+
+.skeleton-stage > .skeleton-placeholder,
+.skeleton-stage > .skeleton-content {
+  transition: opacity var(--motion-normal) var(--ease-enter);
+}
+
+.skeleton-stage[data-loading="true"] > .skeleton-placeholder,
+.skeleton-stage[data-loading="false"] > .skeleton-content {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.skeleton-stage[data-loading="true"] > .skeleton-content,
+.skeleton-stage[data-loading="false"] > .skeleton-placeholder {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reduced motion                                                              */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: var(--motion-reduced);
+    --motion-fast: var(--motion-reduced);
+    --motion-toggle: var(--motion-reduced);
+    --motion-normal: var(--motion-reduced);
+    --motion-panel-enter: var(--motion-reduced);
+    --motion-panel-exit: var(--motion-reduced);
+    --motion-view: var(--motion-reduced);
+    --motion-lyric: var(--motion-reduced);
+    --motion-scroll: 0ms;
+    --motion-layout: var(--motion-reduced);
+    --motion-slow: var(--motion-reduced);
+    --motion-theme: var(--motion-reduced);
+    --motion-toast-enter: var(--motion-reduced);
+    --motion-toast-exit: var(--motion-reduced);
+  }
+
+  html,
+  body,
+  #playlist-wrap,
+  #mylist-wrap,
+  #queue-list,
+  #lyrics-wrap {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0s !important;
+  }
+
+  .body-playing #right-album-art,
+  .spinner,
+  .eq-icon span,
+  .eq-bar,
+  .skeleton-shimmer::after,
+  #btn-like.liked > [data-motion-icon][aria-hidden="false"],
+  .motion-list-enter > :is(.song-item, .my-playlist-item, .queue-item, .entity-card) {
+    animation: none !important;
+  }
+
+  :is(
+      .ctrl-btn,
+      .panel-tab,
+      .search-type,
+      .search-filter,
+      .entity-card,
+      #entity-back,
+      .entity-nav,
+      #login-btn,
+      #tuner-reset,
+      #queue-close,
+      #back-to-playlists,
+      .login-tab,
+      #phone-submit,
+      #qr-close,
+      .visual-option,
+      #settings-panel,
+      #settings-close,
+      #toast-action,
+      #playlist-library-refresh,
+      .playlist-retry,
+      .setting-row,
+      .setting-row-icon > svg,
+      .settings-disclosure,
+      .settings-chevron,
+      #settings-panel #tuner-panel,
+      .ctrl-btn > svg,
+      .visual-option > svg,
+      .ctx-item > svg,
+      .motion-icon-swap > [data-motion-icon],
+      .bar-song-info,
+      .song-item,
+      .my-playlist-item,
+      .queue-item,
+      .ctx-item,
+      .song-thumb,
+      .song-art,
+      .my-playlist-item .pl-icon img,
+      .theme-dot,
+      .lyric-line,
+      .lyric-line.active,
+      .lyric-line.near,
+      .lyric-line:hover,
+      .motion-flip,
+      .motion-view,
+      .motion-view[data-motion-state],
+      #qr-modal.motion-dialog #qr-box,
+      #tuner-panel.motion-popover,
+      #visual-panel.motion-popover,
+      #ctx-menu.motion-popover
+    ) {
+    transform: none !important;
+    transition-property:
+      opacity,
+      color,
+      background-color,
+      border-color,
+      visibility !important;
+    transition-duration: var(--motion-reduced) !important;
+  }
+
+  #progress-fill::after {
+    transition: none !important;
+  }
+
+  body.motion-layout #left-panel,
+  body.motion-layout #right-panel,
+  body.motion-layout[data-layout-mode="immersive"] #left-panel,
+  body.motion-layout[data-layout-mode="immersive"] #right-panel,
+  body.motion-layout #three-canvas,
+  body.motion-layout #liquid-canvas,
+  body.motion-layout #bg-gradient {
+    transform: none !important;
+    transition-property: opacity, visibility;
+  }
+
+  .motion-running,
+  body.motion-layout.layout-is-transitioning #left-panel,
+  body.motion-layout.layout-is-transitioning #right-panel,
+  body.motion-layout.layout-is-transitioning #three-canvas,
+  body.motion-layout.layout-is-transitioning #liquid-canvas,
+  body.motion-layout.layout-is-transitioning #bg-gradient {
+    will-change: auto;
+  }
+
+  #queue-panel,
+  #queue-panel.hidden,
+  #toast,
+  #toast.show {
+    transform: none;
+    transition-property: opacity, visibility;
+  }
+
+  ::view-transition-group(nebula-root),
+  ::view-transition-group(nebula-content),
+  ::view-transition-group(nebula-player),
+  ::view-transition-group(nebula-art),
+  ::view-transition-old(nebula-root),
+  ::view-transition-old(nebula-content),
+  ::view-transition-old(nebula-player),
+  ::view-transition-old(nebula-art),
+  ::view-transition-new(nebula-root),
+  ::view-transition-new(nebula-content),
+  ::view-transition-new(nebula-player),
+  ::view-transition-new(nebula-art) {
+    animation: none !important;
+  }
+}

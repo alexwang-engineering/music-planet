@@ -84,7 +84,10 @@ function createWindow() {
     },
   })
 
-  mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'))
+  const loadOptions = process.env.NEBULA_PERF_DEBUG === '1'
+    ? { query: { perf: '1' } }
+    : undefined
+  mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'), loadOptions)
 
   // Open external links in system browser, not in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
