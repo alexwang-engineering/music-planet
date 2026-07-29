@@ -4331,13 +4331,18 @@ function showContextMenu(x, y, song) {
   _ctxSong = song;
   const menu = document.getElementById('ctx-menu');
   menu.classList.remove('hidden');
+  menu.inert = false;
+  menu.setAttribute('aria-hidden', 'false');
   // Clamp to viewport so it never opens off-screen.
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
   menu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
   menu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
 }
 function hideContextMenu() {
-  document.getElementById('ctx-menu').classList.add('hidden');
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.add('hidden');
+  menu.inert = true;
+  menu.setAttribute('aria-hidden', 'true');
   _ctxSong = null;
 }
 document.getElementById('ctx-menu').addEventListener('click', (e) => {
@@ -5406,6 +5411,7 @@ function toggleQueue(show) {
   const panel = document.getElementById('queue-panel');
   panel.classList.toggle('hidden', !_queueOpen);
   panel.setAttribute('aria-hidden', String(!_queueOpen));
+  panel.inert = !_queueOpen;
   document.getElementById('btn-queue').classList.toggle('active', _queueOpen);
   document.getElementById('btn-queue').setAttribute('aria-expanded', String(_queueOpen));
   if (_queueOpen) renderQueue();
@@ -7226,8 +7232,16 @@ function selectPanelTab(tab) {
   playlistTab.classList.toggle('active', showPlaylists);
   searchTab.setAttribute('aria-selected', String(!showPlaylists));
   playlistTab.setAttribute('aria-selected', String(showPlaylists));
-  document.getElementById('playlist-wrap').style.display = showPlaylists ? 'none' : 'block';
-  document.getElementById('mylist-wrap').style.display = showPlaylists ? 'block' : 'none';
+  const playlistWrap = document.getElementById('playlist-wrap');
+  const mylistWrap = document.getElementById('mylist-wrap');
+  playlistWrap.style.display = showPlaylists ? 'none' : 'block';
+  mylistWrap.style.display = showPlaylists ? 'block' : 'none';
+  // A hidden tabpanel must be inert, or it silently blocks real clicks/keys
+  // while staying "visible" to programmatic .click() calls.
+  playlistWrap.inert = showPlaylists;
+  playlistWrap.setAttribute('aria-hidden', String(showPlaylists));
+  mylistWrap.inert = !showPlaylists;
+  mylistWrap.setAttribute('aria-hidden', String(!showPlaylists));
   updateSearchChrome();
 }
 
@@ -7388,15 +7402,22 @@ async function startQrLogin() {
 
 // ── Login modal: open + tab switching ──────────────────────────────
 function openLoginModal(tab = 'qr') {
-  document.getElementById('qr-modal').classList.remove('hidden');
+  const modal = document.getElementById('qr-modal');
+  modal.classList.remove('hidden');
+  modal.inert = false;
+  modal.setAttribute('aria-hidden', 'false');
   switchLoginTab(tab);
 }
 
 function switchLoginTab(tab) {
   document.getElementById('tab-qr').classList.toggle('active', tab === 'qr');
   document.getElementById('tab-phone').classList.toggle('active', tab === 'phone');
-  document.getElementById('qr-section').style.display  = tab === 'qr'    ? 'block' : 'none';
-  document.getElementById('phone-section').style.display = tab === 'phone' ? 'block' : 'none';
+  const qrSection = document.getElementById('qr-section');
+  const phoneSection = document.getElementById('phone-section');
+  qrSection.style.display  = tab === 'qr'    ? 'block' : 'none';
+  phoneSection.style.display = tab === 'phone' ? 'block' : 'none';
+  qrSection.inert = tab !== 'qr';
+  phoneSection.inert = tab !== 'phone';
   if (tab === 'qr') {
     startQrLogin();
   } else {
@@ -7409,7 +7430,10 @@ function switchLoginTab(tab) {
 function closeLoginModal() {
   invalidateLoginAttempt();
   clearQrLoginSchedule();
-  document.getElementById('qr-modal').classList.add('hidden');
+  const modal = document.getElementById('qr-modal');
+  modal.classList.add('hidden');
+  modal.inert = true;
+  modal.setAttribute('aria-hidden', 'true');
 }
 
 document.getElementById('login-btn').addEventListener('click', () => openLoginModal('qr'));
