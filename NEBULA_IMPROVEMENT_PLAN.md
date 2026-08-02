@@ -383,3 +383,15 @@
 - Electron 实机连续点击可播放的 `Somehow` 与 `Slow Motion` 后，最终标题、右侧歌曲信息和播放进度均稳定停留在最后选择的 `Slow Motion`。
 - 新增 API 端口、renderer endpoint、request generation 与代码契约测试；自动测试为 `103/103`。
 - 新版 arm64 包已安装到 `/Users/wjl/Desktop/Apps/Nebula.app`；启动时分配端口 `61048`，登录态与最近播放均保留。被替换的上一版可从 `/Users/wjl/Desktop/Apps/Nebula.pre-2026-08-02.app` 恢复。
+
+### 旧版优先的脉冲线框扩展（2026-08-02）
+
+- 重新核对桌面旧版 `app.asar` 与源码哈希，确认唯一对应仓库为 `/Users/wjl/music-player-app`；错误仓库 `/Users/wjl/Github/music-planet` 不再作为实现源。
+- 将用户指定的旧版完整冻结为 commit `01963db`，并从该点创建 `codex/old-version-wireframe`，保证后续改进可回退且不替换旧 Planet。
+- 新模式使用独立 detail-3 线框叠层；原 Planet 继续使用原 detail-2 几何、同一 renderer、同一 RAF 和同一 Web Audio 分析链路。
+- 低频响应按实际 FFT 元数据解析 `20–180Hz`，使用 RMS 噪声底、`45ms` attack 和 `220ms` release；模式切换为约 `260ms` 的可逆过渡。
+- 新增完整 visualizer teardown，支持 WebGL 与 Web Audio 资源释放；reduced-motion 仅绘制一致的静态帧。
+- 详细架构、阶段与验收清单见 `docs/PULSE_WIREFRAME_PLAN.md`。
+- 自动测试增加到 `110/110`，renderer module syntax、`git diff --check` 与运行时高危审计全部通过。
+- 源码版播放真实歌曲时线框、歌词和播放链路同时工作，约 `60.0fps / CPU p99 1.1ms / miss 0.0%`；arm64 打包版线框约 `60.0fps / CPU p99 1.4ms / miss 0.0%`。
+- `dist/mac-arm64/Nebula.app` 已验证为 arm64、包含随包 API，且 `index.html`、`experience.css`、`wireframe-audio.mjs` 与源码逐字一致；按计划暂不覆盖桌面旧版。

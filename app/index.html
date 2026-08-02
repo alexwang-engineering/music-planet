@@ -1505,6 +1505,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
         <span>星球</span>
       </button>
+      <button class="visual-option" data-visual="wireframe" role="radio" aria-checked="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5 20 7v10l-8 4.5L4 17V7l8-4.5Z"/><path d="m4 7 8 4.5L20 7M12 11.5v10M8 4.7l8 14.6M16 4.7 8 19.3"/></svg>
+        <span>脉冲线框</span>
+      </button>
       <button class="visual-option" data-visual="liquidAura" role="radio" aria-checked="false" tabindex="-1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
         <span>流光</span>
@@ -1647,6 +1651,12 @@ import {
 } from './lyric-sync.mjs';
 import { resolveLoopbackApiBase } from './api-endpoint.mjs';
 import { createLatestRequestCoordinator } from './latest-request.mjs';
+import {
+  calculateWireBassLevel,
+  resolveFrequencyBinRange,
+  smoothAttackRelease,
+  smoothModeMix,
+} from './wireframe-audio.mjs';
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -1968,10 +1978,11 @@ function resizeVisualSurfaces() {
   _progressRect = null;
   requestVisualFrame();
 }
-window.addEventListener('resize', () => {
+function scheduleVisualResize() {
   if (resizeFrame) cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(resizeVisualSurfaces);
-});
+}
+window.addEventListener('resize', scheduleVisualResize);
 
 // ===================================================================
 // SHADERS
@@ -1984,6 +1995,9 @@ const vertexShader = `
   uniform float uHigh;
   uniform float uBeatFlash;
   uniform float uSpikeMul;
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform float uReducedMotion;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -2065,9 +2079,29 @@ const vertexShader = `
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
     float spikeAmp = (uBass * 0.085 + uBeatFlash * 0.075) * uSpikeMul;
-    float displacement = noise * (0.030 + spikeAmp)
-                       + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
-                       + windDrift + idleBreath;
+    float planetDisplacement = noise * (0.030 + spikeAmp)
+                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
+                             + windDrift + idleBreath;
+
+    // The installed Planet remains byte-for-byte equivalent at mix 0. Pulse
+    // Wire adds a separate, bounded deformation branch driven only by the
+    // smoothed 20–180Hz envelope.
+    float displacement = planetDisplacement;
+    if (uWireModeMix > 0.0001) {
+      float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
+      // Keep the pulse topology independent from the existing mid/high-band
+      // Planet modulation. Only the dedicated bass envelope changes its size.
+      float wireNoise = snoise(position * 1.55 + uTime * 0.12);
+      float wireFine = snoise(position * 4.10 - uTime * 0.08);
+      float wireField = wireNoise * 0.74 + wireFine * 0.26;
+      float wirePeak = pow(max(wireField, 0.0), 1.65);
+      float wireMotion = mix(1.0, 0.58, uReducedMotion);
+      float wireDisplacement = wireField * 0.007
+                             + wirePeak * wireEnergy * 0.25 * uSpikeMul
+                             + max(wireField, 0.0) * wireEnergy * 0.035;
+      wireDisplacement = clamp(wireDisplacement * wireMotion, -0.025, 0.27);
+      displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
+    }
 
     vDisplacement = displacement;
 
@@ -2088,6 +2122,7 @@ const fragmentShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -2308,6 +2343,7 @@ const fragmentShader = `
     // Subtle film grain — organic texture reminiscent of vinyl/analog media
     float grain = fract(sin(dot(gl_FragCoord.xy + uTime * 131.7, vec2(12.9898, 78.233))) * 43758.5453);
     col += (grain - 0.5) * 0.016;
+    alpha *= 1.0 - uWireModeMix;
     gl_FragColor = vec4(clamp(col, 0.0, 2.2), clamp(alpha, 0.0, 0.98));
   }
 `;
@@ -2330,6 +2366,10 @@ const sphereMat = new THREE.ShaderMaterial({
     uBeatFlash:  { value: 0 },
     uFlux:       { value: 0 },
     uSpikeMul:   { value: 1 },
+    uWireModeMix:{ value: 0 },
+    uWireBass:   { value: 0 },
+    uWireColor:  { value: new THREE.Color(0xb829e3) },
+    uReducedMotion: { value: 0 },
   },
   wireframe: true,
   transparent: true,
@@ -2354,6 +2394,7 @@ const glowWireFragShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying float vDisplacement;
@@ -2372,6 +2413,7 @@ const glowWireFragShader = `
     float shimmer = sin(uTime * (2.1 + uBass * 2.5) + vPosition.y * 3.8 + vPosition.x * 2.6) * (0.022 + uAudioLevel * 0.018 + uBeatFlash * 0.022) + 1.0;
     col *= shimmer;
     float alpha = (0.11 + fresnel * (0.30 + uFlux * 0.10) + spikeFactor * 0.13 + uBass * 0.08 + uMid * 0.04 + uBeatFlash * 0.18) * depthFade;
+    alpha *= 1.0 - uWireModeMix;
     gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.88));
   }
 `;
@@ -2385,6 +2427,7 @@ const outerGlowWireFragShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying float vDisplacement;
@@ -2402,6 +2445,7 @@ const outerGlowWireFragShader = `
     float shimmer = sin(uTime * 2.1 + vPosition.y * 3.8 + vPosition.x * 2.6) * 0.015 + 1.0;
     col *= shimmer;
     float alpha = (0.07 + fresnel * (0.16 + uFlux * 0.07) + spikeFactor * 0.07 + uBass * 0.04 + uMid * 0.02 + uBeatFlash * 0.10) * depthFade;
+    alpha *= 1.0 - uWireModeMix;
     gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.55));
   }
 `;
@@ -2426,6 +2470,79 @@ const glowSphere2 = new THREE.Mesh(sphereGeo, glowMat2);
 glowSphere2.scale.setScalar(1.022);
 glowSphere2.renderOrder = 3;
 sphere.add(glowSphere2);
+
+// Pulse Wire is a separate detail-3 overlay. The installed Planet keeps its
+// original detail-2 geometry and shader appearance at mix 0; only this overlay
+// becomes visible for the new mode.
+const pulseWireFragmentShader = `
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform vec3 uWireColor;
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float signedNdotV = dot(normalize(vNormal), viewDir);
+    float NdotV = abs(signedNdotV);
+    float depthFade = clamp(signedNdotV * 2.5 + 1.0, 0.10, 1.0);
+    float fresnel = pow(1.0 - NdotV, 2.15);
+    float tip = smoothstep(0.025, 0.20, vDisplacement);
+    float energy = clamp(uWireBass, 0.0, 1.0);
+    vec3 color = uWireColor * (1.12 + fresnel * 2.10 + energy * 0.72 + tip * 0.55);
+    color += vec3(0.34, 0.10, 0.48) * fresnel * (0.45 + energy * 0.80);
+    float alpha = (0.38 + fresnel * 0.52 + energy * 0.14 + tip * 0.16)
+                * depthFade * uWireModeMix;
+    gl_FragColor = vec4(clamp(color, 0.0, 2.4), clamp(alpha, 0.0, 0.98));
+  }
+`;
+const pulseWireGlowFragmentShader = `
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform vec3 uWireColor;
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+  varying float vDisplacement;
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float signedNdotV = dot(normalize(vNormal), viewDir);
+    float NdotV = abs(signedNdotV);
+    float depthFade = clamp(signedNdotV * 2.5 + 1.0, 0.12, 1.0);
+    float fresnel = pow(1.0 - NdotV, 1.65);
+    vec3 color = uWireColor * (0.90 + fresnel * 2.20 + uWireBass * 0.72);
+    float alpha = (0.09 + fresnel * 0.30 + uWireBass * 0.11)
+                * depthFade * uWireModeMix;
+    gl_FragColor = vec4(clamp(color, 0.0, 3.0), clamp(alpha, 0.0, 0.60));
+  }
+`;
+const pulseWireGeo = new THREE.IcosahedronGeometry(0.90, 3);
+const pulseWireMat = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader: pulseWireFragmentShader,
+  uniforms: sphereMat.uniforms,
+  wireframe: true,
+  transparent: true,
+  blending: THREE.NormalBlending,
+  depthWrite: false,
+});
+const pulseWireSphere = new THREE.Mesh(pulseWireGeo, pulseWireMat);
+pulseWireSphere.renderOrder = 4;
+pulseWireSphere.visible = false;
+sphere.add(pulseWireSphere);
+
+const pulseWireGlowMat = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader: pulseWireGlowFragmentShader,
+  uniforms: sphereMat.uniforms,
+  wireframe: true,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const pulseWireGlowSphere = new THREE.Mesh(pulseWireGeo, pulseWireGlowMat);
+pulseWireGlowSphere.scale.setScalar(1.018);
+pulseWireGlowSphere.renderOrder = 5;
+pulseWireSphere.add(pulseWireGlowSphere);
 
 // ── Dual-layer glow: solid NormalBlending core + faint AdditiveBlending halo ──
 // Core: bounded bright sun with no alpha bleed; Halo: subtle warmth, alpha≤0.14
@@ -2970,11 +3087,12 @@ const playbackProgress = createPlaybackProgressController({
   visibility: document,
   reducedMotion: reducedMotionQuery.matches,
 });
-reducedMotionQuery.addEventListener?.('change', event => {
+function handleReducedMotionChange(event) {
   playbackProgress.setReducedMotion(event.matches);
   if (event.matches) requestVisualFrame();
   else startAnimationLoop();
-});
+}
+reducedMotionQuery.addEventListener?.('change', handleReducedMotionChange);
 window.addEventListener('beforeunload', () => playbackProgress.destroy(), { once: true });
 
 let audioCtx = null;
@@ -2984,6 +3102,7 @@ let sourceNode = null;
 let compressor = null;
 let audioConnected = false;
 let audioResumePromise = null;
+let wireBassRange = resolveFrequencyBinRange();
 
 function resumeAudioContext() {
   if (!audioCtx || audioCtx.state !== 'suspended') return Promise.resolve();
@@ -3025,6 +3144,11 @@ function initAudio() {
     analyser.connect(compressor);
     compressor.connect(audioCtx.destination);
     dataArray = new Uint8Array(analyser.frequencyBinCount);
+    wireBassRange = resolveFrequencyBinRange({
+      sampleRate: audioCtx.sampleRate,
+      fftSize: analyser.fftSize,
+      frequencyBinCount: analyser.frequencyBinCount,
+    });
     audioConnected = true;
   } catch (e) {
     // Visualization is optional — never let Web Audio failures break playback.
@@ -3035,6 +3159,7 @@ function initAudio() {
 
 let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
 let fluxLevel = 0, brightnessLevel = 0;
+let wireBassLevel = 0;
 let prevDataArray = null;
 // Bass-band spectral flux — the kick-attack signal. Absolute bass level fails
 // on sustained-808 tracks (rap: level never dips → threshold chases it and no
@@ -3048,7 +3173,10 @@ let bassFluxHistorySum = 0;
 let _prevBassFlux = 0;
 
 function updateAudio(delta) {
-  if (!analyser) return false;
+  if (!analyser) {
+    wireBassLevel = 0;
+    return false;
+  }
 
   // Audio analysis intentionally stays at 60Hz while the center surface can
   // render at 90/120Hz. This preserves the detector's time windows and avoids
@@ -3073,6 +3201,7 @@ function updateAudio(delta) {
   // brightness = air band (70–100%) — controls particle sparkle
   let brightSum = 0;
   for (let i = highBins; i < binCount; i++)   brightSum += dataArray[i];
+  wireBassLevel = calculateWireBassLevel(dataArray, wireBassRange);
 
   const rawBass       = Math.pow(bassSum / bassBins / 255, 0.85);
   const rawMid        = Math.pow(midSum  / (midBins - bassBins) / 255, 0.85);
@@ -3169,7 +3298,38 @@ function saveViz() {
 }
 
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
-let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0;
+let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0, _sWireBass = 0;
+let _wireModeMix = 0;
+
+function syncPulseWireRendering({ reducedMotion = false } = {}) {
+  sphereMat.uniforms.uWireBass.value = _sWireBass;
+  sphereMat.uniforms.uWireModeMix.value = _wireModeMix;
+  sphereMat.uniforms.uReducedMotion.value = reducedMotion ? 1 : 0;
+  const planetVisible = _wireModeMix < 0.999;
+  sphereMat.visible = planetVisible;
+  glowMat1.visible = planetVisible;
+  glowMat2.visible = planetVisible;
+  pulseWireSphere.visible = _wireModeMix > 0.001;
+}
+
+function syncReducedMotionEnvironment() {
+  const wireEnvironment = 1 - _wireModeMix * 0.58;
+  coreMat.uniforms.uIntensity.value = 0.88 * wireEnvironment;
+  orbitRings.forEach(orbitRing => {
+    orbitRing.material.opacity = orbitRing.userData.baseOpacity * wireEnvironment;
+  });
+  audioComets.forEach(comet => {
+    comet.headMat.opacity = 0.55 * wireEnvironment;
+    comet.tail.material.opacity = 0.12 * wireEnvironment;
+  });
+  sphereLight.intensity = 1.2 * wireEnvironment;
+  particleMat.opacity = 0.04 * (0.55 + wireEnvironment * 0.45);
+  haloMat2.opacity = 0.06 * (0.45 + wireEnvironment * 0.55);
+  if (ambientBloomEl) {
+    ambientBloomEl.style.setProperty('--ambient-opacity', (0.08 * wireEnvironment).toFixed(3));
+    ambientBloomEl.style.setProperty('--ambient-scale', '0.920');
+  }
+}
 
 // Integrated breathing phases — rate speeds up with audio so there are no phase discontinuities
 let _breathePhase  = 0;
@@ -3432,13 +3592,16 @@ function _renderLiquidAura(dt) {
 }
 
 let animationFrameId = 0;
+let visualizerDisposed = false;
+let visualModeTransitionTimer = 0;
 
 function requestVisualFrame() {
-  if (!reducedMotionQuery.matches || animationFrameId || document.hidden) return;
+  if (visualizerDisposed || !reducedMotionQuery.matches || animationFrameId || document.hidden) return;
   animationFrameId = requestAnimationFrame(animate);
 }
 
 function animate(frameTimestamp) {
+  if (visualizerDisposed) return;
   animationFrameId = 0;
   perfMonitor.beginFrame(frameTimestamp);
 
@@ -3458,6 +3621,10 @@ function animate(frameTimestamp) {
     if (state.visualMode === 'liquidAura') {
       _renderLiquidAura(0);
     } else {
+      _sWireBass = 0;
+      _wireModeMix = state.visualMode === 'wireframe' ? 1 : 0;
+      syncPulseWireRendering({ reducedMotion: true });
+      syncReducedMotionEnvironment();
       sphereMat.uniforms.uAudioLevel.value = 0;
       sphereMat.uniforms.uBass.value = 0;
       sphereMat.uniforms.uMid.value = 0;
@@ -3557,6 +3724,14 @@ function animate(frameTimestamp) {
   _sMid   += (midLevel   - _sMid)   * (midLevel   > _sMid   ? _sfAtkMid   : _sfRelMid);
   _sHigh  += (highLevel  - _sHigh)  * (highLevel  > _sHigh  ? _sfAtkHigh  : _sfRelHigh);
   _sAudio += (audioLevel - _sAudio) * (audioLevel > _sAudio ? _sfAtkAudio : _sfRelAudio);
+  _sWireBass = smoothAttackRelease(_sWireBass, wireBassLevel, delta);
+  _wireModeMix = smoothModeMix(
+    _wireModeMix,
+    state.visualMode === 'wireframe',
+    delta,
+  );
+  syncPulseWireRendering();
+  const wireEnvironment = 1 - _wireModeMix * 0.58;
 
   updateMixTheme(delta, frame60);
 
@@ -3603,7 +3778,7 @@ function animate(frameTimestamp) {
   const coreScale = 1.0 + _sBass * 0.07 + spherePulse * 0.05 + beatFlash * 0.04;
   _corePulsePhase += delta * (1.8 + _sAudio * 2.2 + spherePulse * 1.8);
   const _corePulse = 0.90 + Math.sin(_corePulsePhase) * 0.10;
-  coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60);
+  coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60) * wireEnvironment;
   // Glow drifts toward orb-violet tinted with theme accent — subtle theme feedback on rim
   const _themeRimBlend = Math.min(0.12 + _sAudio * 0.12 + beatFlash * 0.10, 0.28);
   _glowTarget.copy(sphereMat.uniforms.uColor2.value).lerp(_themeAccentColor, _themeRimBlend);
@@ -3645,7 +3820,7 @@ function animate(frameTimestamp) {
       orbitRing.material.opacity = Math.min(
         orbitRing.userData.baseOpacity * (1.0 + audioLevel * 2.0 + beatFlash * 3.0),
         0.92
-      );
+      ) * wireEnvironment;
       // Alternate between uColor1 and uColor2 per ring for visual contrast
       const ringColor = i % 2 === 0 ? sphereMat.uniforms.uColor2.value : sphereMat.uniforms.uColor1.value;
       ringColor.getHSL(_hslScratch);
@@ -3678,7 +3853,7 @@ function animate(frameTimestamp) {
     );
     const headScale = 1.0 + _sBass * 2.2 + beatFlash * 2.8 + (i === 0 ? fluxLevel * 1.2 : 0.0);
     comet.head.scale.setScalar(headScale);
-    comet.headMat.opacity = Math.min(0.55 + _sAudio * 0.26 + beatFlash * 0.34, 1.0);
+    comet.headMat.opacity = Math.min(0.55 + _sAudio * 0.26 + beatFlash * 0.34, 1.0) * wireEnvironment;
 
     for (let p = 0; p < cometTailPoints; p++) {
       const lag = p * (0.055 + _sBass * 0.010);
@@ -3694,12 +3869,12 @@ function animate(frameTimestamp) {
     const cometLight = Math.min(_hslScratch.l * 1.15 + 0.16 + beatFlash * 0.10, 0.92);
     comet.headMat.color.setHSL(hueShift, Math.min(_hslScratch.s * 1.15, 1.0), cometLight);
     comet.tail.material.color.copy(comet.headMat.color);
-      comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62);
+      comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62) * wireEnvironment;
     }
   }
 
   // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
-  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene;
+  sphereLight.intensity = (1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene) * wireEnvironment;
   sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, alphaFrom60Hz(0.04, frame60));
 
   // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
@@ -3726,7 +3901,7 @@ function animate(frameTimestamp) {
   particles.rotation.y -= (0.00015 + brightnessLevel * 0.0012 + spherePulse * 0.0030) * frame60;
   particles.rotation.x += (0.00005 + brightnessLevel * 0.0004) * frame60;
   particles.rotation.z += (0.00008 + _sAudio * 0.0004) * frame60;
-  particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10);
+  particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10) * (0.55 + wireEnvironment * 0.45);
   particleMat.size    = 0.014 + _sBass * 0.010 + beatFlash * 0.008;
   particles.scale.setScalar(1.0 + _sBass * 0.04 + beatFlash * 0.06);
   // color stays fixed muted-purple — no lerp toward theme color
@@ -3735,7 +3910,7 @@ function animate(frameTimestamp) {
   haloParticles.rotation.y += (0.0008 + midLevel * 0.004 + _sBass * 0.012 + spherePulse * 0.025 + beatFlash * 0.045) * frame60;
   haloParticles.rotation.x -= (0.0003 + highLevel * 0.002 + _sBass * 0.006) * frame60;
   haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004 * frame60;
-  haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
+  haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18) * (0.45 + wireEnvironment * 0.55);
   haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
   haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.4 * VIZ.scene);
   // color stays fixed muted-purple — no lerp toward theme color
@@ -3799,7 +3974,7 @@ function animate(frameTimestamp) {
   // ── Ambient bloom UI (12fps; only compositor opacity/scale writes) ──
   if (ambientBloomEl && time - lastBgGlow > 1 / 12) {
     lastBgGlow = time;
-    const bloomOpacity = Math.min(0.08 + _sBass * 0.18 + beatFlash * 0.30, 0.54);
+    const bloomOpacity = Math.min(0.08 + _sBass * 0.18 + beatFlash * 0.30, 0.54) * wireEnvironment;
     const bloomScale = 0.92 + _sBass * 0.18 + beatFlash * 0.24;
     ambientBloomEl.style.setProperty('--ambient-opacity', bloomOpacity.toFixed(3));
     ambientBloomEl.style.setProperty('--ambient-scale', bloomScale.toFixed(3));
@@ -3835,14 +4010,14 @@ function animate(frameTimestamp) {
 }
 
 function startAnimationLoop() {
-  if (animationFrameId || document.hidden) return;
+  if (visualizerDisposed || animationFrameId || document.hidden) return;
   clock.getDelta();
   audioSampleAccumulator = AUDIO_SAMPLE_INTERVAL;
   perfMonitor.resetTimestamp();
   animationFrameId = requestAnimationFrame(animate);
 }
 
-document.addEventListener('visibilitychange', () => {
+function handleVisualVisibilityChange() {
   if (document.hidden) {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = 0;
@@ -3850,9 +4025,49 @@ document.addEventListener('visibilitychange', () => {
     return;
   }
   startAnimationLoop();
-});
+}
+document.addEventListener('visibilitychange', handleVisualVisibilityChange);
 
 startAnimationLoop();
+
+function teardownVisualizer() {
+  if (visualizerDisposed) return;
+  visualizerDisposed = true;
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  animationFrameId = 0;
+  resizeFrame = 0;
+  clearTimeout(visualModeTransitionTimer);
+  window.removeEventListener('resize', scheduleVisualResize);
+  document.removeEventListener('visibilitychange', handleVisualVisibilityChange);
+  reducedMotionQuery.removeEventListener?.('change', handleReducedMotionChange);
+  perfMonitor.destroy();
+
+  const geometries = new Set();
+  const materials = new Set([haloMat]);
+  const textures = new Set();
+  scene.traverse(object => {
+    if (object.geometry) geometries.add(object.geometry);
+    const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    objectMaterials.filter(Boolean).forEach(material => {
+      materials.add(material);
+      Object.values(material).forEach(value => { if (value?.isTexture) textures.add(value); });
+      Object.values(material.uniforms || {}).forEach(uniform => {
+        if (uniform?.value?.isTexture) textures.add(uniform.value);
+      });
+    });
+  });
+  textures.forEach(texture => texture.dispose());
+  geometries.forEach(geometry => geometry.dispose());
+  materials.forEach(material => material.dispose());
+  renderer.renderLists?.dispose();
+  renderer.dispose();
+
+  try { sourceNode?.disconnect(); } catch (_) {}
+  try { analyser?.disconnect(); } catch (_) {}
+  try { compressor?.disconnect(); } catch (_) {}
+  if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+}
 
 // ===================================================================
 // COLOR EXTRACTION FROM ALBUM ART
@@ -4636,6 +4851,7 @@ audio.addEventListener('error', () => {
 // playing saved it, so "pause → quit" lost up to the whole last session.
 audio.addEventListener('pause', saveResume);
 window.addEventListener('beforeunload', saveResume);
+window.addEventListener('beforeunload', teardownVisualizer, { once: true });
 
 // ── System media controls (media keys, AirPods, macOS Now Playing) ──
 if ('mediaSession' in navigator) {
@@ -4836,12 +5052,11 @@ document.querySelectorAll('.theme-dot').forEach(dot => {
 
 const VISUAL_MODE_LABELS = {
   planet:     '干净星球',
+  wireframe:  '脉冲线框',
   wave:       '3D 粒子波',
   bars:       '频谱柱阵',
   liquidAura: '流光灵韵',
 };
-
-let visualModeTransitionTimer = 0;
 
 function applyVisualMode(mode, silent = false) {
   // wave and bars removed from UI — silently map to planet
@@ -4853,6 +5068,7 @@ function applyVisualMode(mode, silent = false) {
     const selected = btn.dataset.visual === mode;
     btn.classList.toggle('active', selected);
     btn.setAttribute('aria-checked', String(selected));
+    btn.tabIndex = selected ? 0 : -1;
   });
   const visualBtn = document.getElementById('btn-visual');
   if (visualBtn) {

@@ -2023,7 +2023,7 @@ body.entity-nav-back::view-transition-new(nebula-content) {
 
 .visual-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -2031,6 +2031,7 @@ body.entity-nav-back::view-transition-new(nebula-content) {
   width: 100%;
   min-height: 38px;
   height: auto;
+  padding-inline: 6px;
   justify-content: center;
   border: 1px solid transparent;
 }

@@ -60,6 +60,29 @@ test('reduced motion renders a static visual frame without maintaining the loop'
   assert.match(rendererSource, /if \(reducedVisualMotion\) \{[\s\S]*?_renderLiquidAura\(0\)/);
 });
 
+test('pulse wire extends the installed Planet without replacing its geometry or runtime', () => {
+  assert.match(rendererSource, /data-visual="wireframe"[^>]*role="radio"/);
+  assert.match(rendererSource, /wireframe:\s*'脉冲线框'/);
+  assert.match(rendererSource, /const sphereGeo = new THREE\.IcosahedronGeometry\(0\.90, 2\)/);
+  assert.match(rendererSource, /const pulseWireGeo = new THREE\.IcosahedronGeometry\(0\.90, 3\)/);
+  assert.match(rendererSource, /uWireColor:\s*\{ value: new THREE\.Color\(0xb829e3\) \}/);
+  assert.match(rendererSource, /calculateWireBassLevel\(dataArray, wireBassRange\)/);
+  assert.match(rendererSource, /smoothAttackRelease\(_sWireBass, wireBassLevel, delta\)/);
+  assert.match(rendererSource, /smoothModeMix\([\s\S]*?state\.visualMode === 'wireframe'/);
+  assert.equal((rendererSource.match(/new THREE\.WebGLRenderer\(/g) || []).length, 1);
+  assert.equal((rendererSource.match(/new \(window\.AudioContext \|\| window\.webkitAudioContext\)\(\)/g) || []).length, 1);
+});
+
+test('visualizer teardown owns animation, WebGL, and Web Audio resources', () => {
+  assert.match(rendererSource, /function teardownVisualizer\(\)/);
+  assert.match(rendererSource, /cancelAnimationFrame\(animationFrameId\)/);
+  assert.match(rendererSource, /scene\.traverse\(object =>/);
+  assert.match(rendererSource, /renderer\.dispose\(\)/);
+  assert.match(rendererSource, /sourceNode\?\.disconnect\(\)/);
+  assert.match(rendererSource, /audioCtx\.close\(\)\.catch/);
+  assert.match(rendererSource, /beforeunload', teardownVisualizer/);
+});
+
 test('CI gates runtime dependency risk and the complete local check suite', () => {
   assert.equal(
     packageJson.scripts['audit:high'],
