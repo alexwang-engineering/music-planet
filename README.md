@@ -14,6 +14,8 @@ in a custom Three.js/WebGL player interface and packages as a macOS application.
 - Electron main/renderer separation with a local API lifecycle managed by the
   desktop host.
 - A custom 3D visualiser with user-tunable rhythm and motion controls.
+- Three smoothly transitioning visual modes: the album-aware planet, a
+  bass-reactive purple pulse wireframe, and the 2D liquid aura.
 - Session-cookie redaction before request or response data reaches logs.
 - Electron web security remains enabled, and the companion API binds only to
   `127.0.0.1` instead of the local network.
@@ -23,6 +25,10 @@ in a custom Three.js/WebGL player interface and packages as a macOS application.
 
 - `main.js` is the Electron main process. On launch it spawns a local instance of the [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) (an unofficial NetEase Cloud Music API wrapper) on `127.0.0.1:3000`, waits for it to become ready, then opens the app window.
 - `app/index.html` is the renderer — the player UI, built with Three.js/WebGL for the 3D visuals.
+- The pulse-wire mode reuses the same renderer, scene, animation loop, audio
+  element, `AudioContext`, and `AnalyserNode` as the planet. A device-rate-aware
+  20–180 Hz FFT window drives bounded simplex-noise vertex displacement through
+  45 ms attack / 220 ms release smoothing; quiet passages return toward a sphere.
 - API request/response logs are sanitized before being printed (cookies redacted) since NetEase session cookies can appear in query strings.
 
 ## Run locally

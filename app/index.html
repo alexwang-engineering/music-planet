@@ -39,7 +39,10 @@
     top: 0; left: 0;
     width: 100%; height: 100%;
     z-index: 0;
-    will-change: transform;
+    opacity: 1;
+    pointer-events: none;
+    will-change: transform, opacity;
+    transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* === LIQUID AURA CANVAS === */
@@ -48,7 +51,17 @@
     top: 0; left: 0;
     width: 100%; height: 100%;
     z-index: 0;
-    display: none;
+    opacity: 0;
+    pointer-events: none;
+    will-change: opacity;
+    transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  body.visual-liquid #three-canvas { opacity: 0; }
+  body.visual-liquid #liquid-canvas { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #three-canvas, #liquid-canvas { transition-duration: 80ms; }
   }
 
   /* === BACKGROUND VIGNETTE === */
@@ -1396,6 +1409,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
     <span>星球</span>
   </button>
+  <button class="visual-option" data-visual="wireframe">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5 20 7v10l-8 4.5L4 17V7l8-4.5Z"/><path d="m4 7 8 4.5L20 7M12 11.5v10M8 4.7l8 14.6M16 4.7 8 19.3"/></svg>
+    <span>脉冲线框</span>
+  </button>
   <button class="visual-option" data-visual="liquidAura">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c0 5-8 8-8 12a8 8 0 0016 0c0-4-8-7-8-12z"/></svg>
     <span>流光</span>
@@ -1481,12 +1498,15 @@ const camera = new THREE.PerspectiveCamera(64, window.innerWidth / window.innerH
 camera.position.set(0, 1.2, 4.2);
 camera.lookAt(0, 0.0, -1.5);
 
-window.addEventListener('resize', () => {
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function _resizeThreeCanvas() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.4));
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
+}
+window.addEventListener('resize', _resizeThreeCanvas);
 
 // ===================================================================
 // SHADERS
@@ -1499,6 +1519,9 @@ const vertexShader = `
   uniform float uHigh;
   uniform float uBeatFlash;
   uniform float uSpikeMul;
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform float uReducedMotion;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -1580,9 +1603,21 @@ const vertexShader = `
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
     float spikeAmp = (uBass * 0.085 + uBeatFlash * 0.075) * uSpikeMul;
-    float displacement = noise * (0.030 + spikeAmp)
-                       + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
-                       + windDrift + idleBreath;
+    float planetDisplacement = noise * (0.030 + spikeAmp)
+                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
+                             + windDrift + idleBreath;
+
+    // Pulse-wire mode uses a dedicated, frequency-accurate 20–180 Hz signal.
+    // Quiet audio stays close to a sphere; bass attacks push a bounded set of
+    // outward spikes. The mode mix keeps transitions interruptible and smooth.
+    float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
+    float wirePeak = pow(max(n1 * 0.72 + n3 * 0.28, 0.0), 1.65);
+    float motionScale = mix(1.0, 0.58, uReducedMotion);
+    float wireDisplacement = noise * 0.007
+                           + wirePeak * wireEnergy * 0.25 * uSpikeMul
+                           + max(noise, 0.0) * wireEnergy * 0.035;
+    wireDisplacement = clamp(wireDisplacement * motionScale, -0.025, 0.27);
+    float displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
 
     vDisplacement = displacement;
 
@@ -1603,6 +1638,9 @@ const fragmentShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform vec3 uWireColor;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -1823,6 +1861,16 @@ const fragmentShader = `
     // Subtle film grain — organic texture reminiscent of vinyl/analog media
     float grain = fract(sin(dot(gl_FragCoord.xy + uTime * 131.7, vec2(12.9898, 78.233))) * 43758.5453);
     col += (grain - 0.5) * 0.016;
+    // Dedicated violet Fresnel finish for pulse-wire mode. Keep the color
+    // stable while audio changes luminance, edge energy, and displacement.
+    float wireFresnel = pow(1.0 - NdotV, 2.15);
+    float wireEnergy = clamp(uWireBass, 0.0, 1.0);
+    float wireTip = smoothstep(0.025, 0.20, vDisplacement);
+    vec3 wireCol = uWireColor * (1.12 + wireFresnel * 2.10 + wireEnergy * 0.72 + wireTip * 0.55);
+    wireCol += vec3(0.34, 0.10, 0.48) * wireFresnel * (0.45 + wireEnergy * 0.80);
+    float wireAlpha = (0.38 + wireFresnel * 0.52 + wireEnergy * 0.14 + wireTip * 0.16) * depthFade;
+    col = mix(col, wireCol, uWireModeMix);
+    alpha = mix(alpha, wireAlpha, uWireModeMix);
     gl_FragColor = vec4(clamp(col, 0.0, 2.2), clamp(alpha, 0.0, 0.98));
   }
 `;
@@ -1830,7 +1878,9 @@ const fragmentShader = `
 // ===================================================================
 // SPHERE MESH
 // ===================================================================
-const sphereGeo = new THREE.IcosahedronGeometry(0.90, 2);
+// Detail 3 gives a dense, readable topology without the catastrophic memory/
+// triangle cost of detail 30 (detail grows exponentially for an icosahedron).
+const sphereGeo = new THREE.IcosahedronGeometry(0.90, 3);
 const sphereMat = new THREE.ShaderMaterial({
   vertexShader,
   fragmentShader,
@@ -1845,6 +1895,10 @@ const sphereMat = new THREE.ShaderMaterial({
     uBeatFlash:  { value: 0 },
     uFlux:       { value: 0 },
     uSpikeMul:   { value: 1 },
+    uWireModeMix:{ value: 0 },
+    uWireBass:   { value: 0 },
+    uWireColor:  { value: new THREE.Color(0xb829e3) },
+    uReducedMotion: { value: reducedMotionQuery.matches ? 1 : 0 },
   },
   wireframe: true,
   transparent: true,
@@ -1869,6 +1923,9 @@ const glowWireFragShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform vec3 uWireColor;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying float vDisplacement;
@@ -1887,6 +1944,11 @@ const glowWireFragShader = `
     float shimmer = sin(uTime * (2.1 + uBass * 2.5) + vPosition.y * 3.8 + vPosition.x * 2.6) * (0.022 + uAudioLevel * 0.018 + uBeatFlash * 0.022) + 1.0;
     col *= shimmer;
     float alpha = (0.11 + fresnel * (0.30 + uFlux * 0.10) + spikeFactor * 0.13 + uBass * 0.08 + uMid * 0.04 + uBeatFlash * 0.18) * depthFade;
+    float wireFresnel = pow(1.0 - NdotV, 1.85);
+    vec3 wireCol = uWireColor * (1.30 + wireFresnel * 2.35 + uWireBass * 0.85);
+    float wireAlpha = (0.16 + wireFresnel * 0.48 + uWireBass * 0.17) * depthFade;
+    col = mix(col, wireCol, uWireModeMix);
+    alpha = mix(alpha, wireAlpha, uWireModeMix);
     gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.88));
   }
 `;
@@ -1900,6 +1962,9 @@ const outerGlowWireFragShader = `
   uniform float uBeatFlash;
   uniform float uFlux;
   uniform float uTime;
+  uniform float uWireModeMix;
+  uniform float uWireBass;
+  uniform vec3 uWireColor;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying float vDisplacement;
@@ -1917,6 +1982,11 @@ const outerGlowWireFragShader = `
     float shimmer = sin(uTime * 2.1 + vPosition.y * 3.8 + vPosition.x * 2.6) * 0.015 + 1.0;
     col *= shimmer;
     float alpha = (0.07 + fresnel * (0.16 + uFlux * 0.07) + spikeFactor * 0.07 + uBass * 0.04 + uMid * 0.02 + uBeatFlash * 0.10) * depthFade;
+    float wireFresnel = pow(1.0 - NdotV, 1.55);
+    vec3 wireCol = uWireColor * (0.90 + wireFresnel * 2.10 + uWireBass * 0.65);
+    float wireAlpha = (0.08 + wireFresnel * 0.27 + uWireBass * 0.10) * depthFade;
+    col = mix(col, wireCol, uWireModeMix);
+    alpha = mix(alpha, wireAlpha, uWireModeMix);
     gl_FragColor = vec4(clamp(col, 0.0, 3.0), clamp(alpha, 0.0, 0.55));
   }
 `;
@@ -2484,6 +2554,8 @@ let dataArray = null;
 let sourceNode = null;
 let compressor = null;
 let audioConnected = false;
+let wireBassStartBin = 1;
+let wireBassEndBin = 8;
 
 function initAudio() {
   if (audioConnected) return;
@@ -2505,6 +2577,12 @@ function initAudio() {
     analyser.connect(compressor);
     compressor.connect(audioCtx.destination);
     dataArray = new Uint8Array(analyser.frequencyBinCount);
+    // Resolve the requested bass band from the actual device sample rate.
+    // With fftSize 2048 this remains correct at both 44.1 kHz and 48 kHz.
+    const hzPerBin = audioCtx.sampleRate / analyser.fftSize;
+    wireBassStartBin = Math.max(1, Math.ceil(20 / hzPerBin));
+    wireBassEndBin = Math.max(wireBassStartBin,
+      Math.min(analyser.frequencyBinCount - 1, Math.floor(180 / hzPerBin)));
     audioConnected = true;
   } catch (e) {
     // Visualization is optional — never let Web Audio failures break playback.
@@ -2515,6 +2593,7 @@ function initAudio() {
 
 let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
 let fluxLevel = 0, brightnessLevel = 0;
+let wireBassLevel = 0;
 let prevDataArray = null;
 // Rolling 90-frame bass history for dynamic beat threshold (~1.5s at 60fps)
 const bassHistory = new Float32Array(90);
@@ -2528,7 +2607,7 @@ let bassFluxIdx = 0;
 let _prevBassFlux = 0;
 
 function updateAudio() {
-  if (!analyser) return;
+  if (!analyser) { wireBassLevel = 0; return; }
   if (audioCtx.state === 'suspended') audioCtx.resume();
   analyser.getByteFrequencyData(dataArray);
 
@@ -2544,6 +2623,17 @@ function updateAudio() {
   // brightness = air band (70–100%) — controls particle sparkle
   let brightSum = 0;
   for (let i = highBins; i < binCount; i++)   brightSum += dataArray[i];
+
+  // RMS gives kick/sub-bass transients more weight than a plain average.
+  // Remove a small noise floor, normalize to a useful music range, then
+  // bound the value before it ever reaches vertex displacement.
+  let wireBassSq = 0;
+  const wireBinCount = Math.max(1, wireBassEndBin - wireBassStartBin + 1);
+  for (let i = wireBassStartBin; i <= wireBassEndBin; i++) {
+    wireBassSq += dataArray[i] * dataArray[i];
+  }
+  const wireBassRms = Math.sqrt(wireBassSq / wireBinCount) / 255;
+  wireBassLevel = Math.pow(Math.min(Math.max((wireBassRms - 0.045) / 0.50, 0), 1), 0.82);
 
   const rawBass       = Math.pow(bassSum / bassBins / 255, 0.85);
   const rawMid        = Math.pow(midSum  / (midBins - bassBins) / 255, 0.85);
@@ -2643,7 +2733,8 @@ function saveViz() {
 }
 
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
-let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0;
+let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0, _sWireBass = 0;
+let _wireModeMix = 0;
 
 // Integrated breathing phases — rate speeds up with audio so there are no phase discontinuities
 let _breathePhase  = 0;
@@ -2697,6 +2788,7 @@ const state = {
   theme: 'violet',
   visualMode: 'planet',
 };
+let _visualTransitionUntil = 0;
 
 const metricEls = {
   bass:   { bar: document.getElementById('m-bass'),   val: document.getElementById('mv-bass') },
@@ -2727,6 +2819,9 @@ const _laCtx = _laCanvas ? _laCanvas.getContext('2d') : null;
 let _laTime = 0;
 let _laLastFrameTime = 0;
 let _laPlayBlend = 0;  // lerped 0→1 on play, decays to 0 on pause over ~1s
+let _threeRafId = 0;
+let _liquidRafId = 0;
+let _visualizerDisposed = false;
 
 // Album/theme accent for liquid aura — vivid HSL (the old satMax=0.42 clamp made everything mud)
 let _laHue = 0.745, _laSat = 0.85, _laLight = 0.58;
@@ -2869,8 +2964,10 @@ function _renderLiquidAura(dt) {
 }
 
 function _animateLiquid() {
-  requestAnimationFrame(_animateLiquid);
-  if (state.visualMode !== 'liquidAura' || document.hidden) return;
+  if (_visualizerDisposed) return;
+  _liquidRafId = requestAnimationFrame(_animateLiquid);
+  const crossfading = performance.now() < _visualTransitionUntil;
+  if ((state.visualMode !== 'liquidAura' && !crossfading) || document.hidden) return;
   const now = performance.now() / 1000;
   if (_laLastFrameTime === 0) _laLastFrameTime = now;
   const dt = Math.min(now - _laLastFrameTime, 0.05);
@@ -2880,7 +2977,8 @@ function _animateLiquid() {
 _animateLiquid();
 
 function animate() {
-  requestAnimationFrame(animate);
+  if (_visualizerDisposed) return;
+  _threeRafId = requestAnimationFrame(animate);
 
   if (document.hidden) {
     clock.getDelta();
@@ -2972,6 +3070,14 @@ function animate() {
   _sMid   += (midLevel   - _sMid)   * (midLevel   > _sMid   ? _sfAtkMid   : _sfRelMid);
   _sHigh  += (highLevel  - _sHigh)  * (highLevel  > _sHigh  ? _sfAtkHigh  : _sfRelHigh);
   _sAudio += (audioLevel - _sAudio) * (audioLevel > _sAudio ? _sfAtkAudio : _sfRelAudio);
+  // Wire bass follows attacks quickly, but falls away gradually so topology
+  // never chatters between frames. These time constants are frame-rate neutral.
+  const _wireBassRate = 1.0 - Math.exp(-delta / (wireBassLevel > _sWireBass ? 0.045 : 0.220));
+  _sWireBass += (wireBassLevel - _sWireBass) * _wireBassRate;
+  const _wireTarget = state.visualMode === 'wireframe' ? 1 : 0;
+  const _wireMixRate = 1.0 - Math.exp(-delta / (reducedMotionQuery.matches ? 0.024 : 0.080));
+  _wireModeMix += (_wireTarget - _wireModeMix) * _wireMixRate;
+  if (Math.abs(_wireTarget - _wireModeMix) < 0.001) _wireModeMix = _wireTarget;
 
   sphereMat.uniforms.uTime.value       = time;
   // Breathing modulates perceived audio level slightly — sphere feels more alive
@@ -2984,6 +3090,10 @@ function animate() {
   sphereMat.uniforms.uBeatFlash.value  = beatFlash;
   sphereMat.uniforms.uFlux.value       = fluxLevel * 0.95;
   sphereMat.uniforms.uSpikeMul.value   = VIZ.spike;
+  sphereMat.uniforms.uWireBass.value   = Math.min(_sWireBass, 1.0);
+  sphereMat.uniforms.uWireModeMix.value = _wireModeMix;
+  sphereMat.uniforms.uReducedMotion.value = reducedMotionQuery.matches ? 1 : 0;
+  const _wireEnvironment = 1.0 - _wireModeMix * 0.58;
 
   // Mix theme — hue cycles through full spectrum, speed follows audio energy
   if (state.theme === 'mix') {
@@ -3026,7 +3136,7 @@ function animate() {
   const coreScale = 1.0 + _sBass * 0.07 + spherePulse * 0.05 + beatFlash * 0.04;
   _corePulsePhase += delta * (1.8 + _sAudio * 2.2 + spherePulse * 1.8);
   const _corePulse = 0.90 + Math.sin(_corePulsePhase) * 0.10;
-  coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60);
+  coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60) * _wireEnvironment;
   // Glow drifts toward orb-violet tinted with theme accent — subtle theme feedback on rim
   const _themeRimBlend = Math.min(0.12 + _sAudio * 0.12 + beatFlash * 0.10, 0.28);
   _glowTarget.copy(sphereMat.uniforms.uColor2.value).lerp(_themeAccentColor, _themeRimBlend);
@@ -3063,7 +3173,7 @@ function animate() {
     ring.material.opacity = Math.min(
       ring.userData.baseOpacity * (1.0 + audioLevel * 2.0 + beatFlash * 3.0),
       0.92
-    );
+    ) * _wireEnvironment;
     // Alternate between uColor1 and uColor2 per ring for visual contrast
     const _rc = i % 2 === 0 ? sphereMat.uniforms.uColor2.value : sphereMat.uniforms.uColor1.value;
     _rc.getHSL(_hslScratch);
@@ -3089,7 +3199,7 @@ function animate() {
     );
     const headScale = 1.0 + _sBass * 2.2 + beatFlash * 2.8 + (i === 0 ? fluxLevel * 1.2 : 0.0);
     comet.head.scale.setScalar(headScale);
-    comet.headMat.opacity = Math.min(0.55 + _sAudio * 0.26 + beatFlash * 0.34, 1.0);
+    comet.headMat.opacity = Math.min(0.55 + _sAudio * 0.26 + beatFlash * 0.34, 1.0) * _wireEnvironment;
 
     for (let p = 0; p < cometTailPoints; p++) {
       const lag = p * (0.055 + _sBass * 0.010);
@@ -3105,11 +3215,11 @@ function animate() {
     const cometLight = Math.min(_hslScratch.l * 1.15 + 0.16 + beatFlash * 0.10, 0.92);
     comet.headMat.color.setHSL(hueShift, Math.min(_hslScratch.s * 1.15, 1.0), cometLight);
     comet.tail.material.color.copy(comet.headMat.color);
-    comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62);
+    comet.tail.material.opacity = Math.min(0.12 + _sBass * 0.20 + beatFlash * 0.32 + fluxLevel * 0.12, 0.62) * _wireEnvironment;
   });
 
   // ── Terrain point light — bass drives steady glow, flux adds sharp snap ──
-  sphereLight.intensity = 1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene;
+  sphereLight.intensity = (1.2 + _sBass * 1.5 + beatFlash * 1.6 + fluxLevel * 1.0 + Math.abs(ring) * 2.5 * VIZ.scene) * _wireEnvironment;
   sphereLight.color.lerp(sphereMat.uniforms.uColor2.value, 0.04);
 
   // ── Expanding shockwaves (thin torus rings, not filled disks) ─────
@@ -3136,7 +3246,7 @@ function animate() {
   particles.rotation.y -= 0.00015 + brightnessLevel * 0.0012 + spherePulse * 0.0030;
   particles.rotation.x += 0.00005 + brightnessLevel * 0.0004;
   particles.rotation.z += 0.00008 + _sAudio * 0.0004;
-  particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10);
+  particleMat.opacity = Math.min(0.04 + brightnessLevel * 0.05 + beatFlash * 0.04, 0.10) * (0.55 + _wireEnvironment * 0.45);
   particleMat.size    = 0.014 + _sBass * 0.010 + beatFlash * 0.008;
   particles.scale.setScalar(1.0 + _sBass * 0.04 + beatFlash * 0.06);
   // color stays fixed muted-purple — no lerp toward theme color
@@ -3145,7 +3255,7 @@ function animate() {
   haloParticles.rotation.y += 0.0008 + midLevel * 0.004 + _sBass * 0.012 + spherePulse * 0.025 + beatFlash * 0.045;
   haloParticles.rotation.x -= 0.0003 + highLevel * 0.002 + _sBass * 0.006;
   haloParticles.rotation.z += Math.sin(time * 0.41) * 0.0004;
-  haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18);
+  haloMat2.opacity = Math.min(0.06 + _sBass * 0.09 + spherePulse * 0.05 + beatFlash * 0.05, 0.18) * (0.45 + _wireEnvironment * 0.55);
   haloMat2.size    = 0.018 + _sBass * 0.014 + beatFlash * 0.012;
   haloParticles.scale.setScalar(1.0 + _sBass * 0.06 + spherePulse * 0.08 + beatFlash * 0.04 + ring * 0.4 * VIZ.scene);
   // color stays fixed muted-purple — no lerp toward theme color
@@ -3252,17 +3362,19 @@ function animate() {
   }
 
   // Sway + beat zoom: sphere punches toward camera on each beat then springs back
-  camera.position.x = Math.sin(time * 0.23) * 0.09 + Math.sin(time * 0.67) * 0.035 + _sBass * Math.sin(time * 1.8) * 0.022 + Math.sin(time * 47.3) * _beatShake * 0.018;
-  camera.position.y = 1.2 + Math.cos(time * 0.29) * 0.055 + _sBass * 0.028 + Math.cos(time * 38.9) * _beatShake * 0.012;
-  camera.position.z = 4.2 - (spherePulse * 0.12 + _sBass * 0.04) * VIZ.camera;
+  const _cameraMotion = reducedMotionQuery.matches ? 0.28 : 1.0;
+  camera.position.x = (Math.sin(time * 0.23) * 0.09 + Math.sin(time * 0.67) * 0.035 + _sBass * Math.sin(time * 1.8) * 0.022 + Math.sin(time * 47.3) * _beatShake * 0.018) * _cameraMotion;
+  camera.position.y = 1.2 + (Math.cos(time * 0.29) * 0.055 + _sBass * 0.028 + Math.cos(time * 38.9) * _beatShake * 0.012) * _cameraMotion;
+  camera.position.z = 4.2 - (spherePulse * 0.12 + _sBass * 0.04) * VIZ.camera * _cameraMotion;
   // Subtle bass-reactive lookAt — camera tilts very slightly toward sphere on heavy bass
-  camera.lookAt(Math.sin(time * 0.17) * 0.03, -0.40 + _sBass * 0.06, -1.5);
+  camera.lookAt(Math.sin(time * 0.17) * 0.03 * _cameraMotion, -0.40 + _sBass * 0.06 * _cameraMotion, -1.5);
   // Cinematic beat punch: briefly zoom in on beat, springs back as spherePulse decays
-  const _targetFov = 45.0 - spherePulse * 1.0 - _sBass * 0.3;
+  const _targetFov = 45.0 - (spherePulse * 1.0 + _sBass * 0.3) * _cameraMotion;
   camera.fov += (_targetFov - camera.fov) * 0.12;
   camera.updateProjectionMatrix();
 
-  if (state.visualMode !== 'liquidAura') renderer.render(scene, camera);
+  const _crossfadingCanvas = performance.now() < _visualTransitionUntil;
+  if (state.visualMode !== 'liquidAura' || _crossfadingCanvas) renderer.render(scene, camera);
 }
 
 animate();
@@ -3712,6 +3824,7 @@ audio.addEventListener('error', () => {
 // playing saved it, so "pause → quit" lost up to the whole last session.
 audio.addEventListener('pause', saveResume);
 window.addEventListener('beforeunload', saveResume);
+window.addEventListener('beforeunload', teardownVisualizer, { once: true });
 
 // ── System media controls (media keys, AirPods, macOS Now Playing) ──
 if ('mediaSession' in navigator) {
@@ -3875,6 +3988,7 @@ document.querySelectorAll('.theme-dot').forEach(dot => {
 
 const VISUAL_MODE_LABELS = {
   planet:     '干净星球',
+  wireframe:  '脉冲线框',
   wave:       '3D 粒子波',
   bars:       '频谱柱阵',
   liquidAura: '流光灵韵',
@@ -3884,6 +3998,7 @@ function applyVisualMode(mode, silent = false) {
   // wave and bars removed from UI — silently map to planet
   if (mode === 'wave' || mode === 'bars') mode = 'planet';
   if (!VISUAL_MODE_LABELS[mode]) mode = 'planet';
+  const previousMode = state.visualMode;
   state.visualMode = mode;
   document.querySelectorAll('.visual-option').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.visual === mode);
@@ -3893,12 +4008,12 @@ function applyVisualMode(mode, silent = false) {
     visualBtn.classList.toggle('active', mode !== 'planet');
     visualBtn.title = `视觉模式：${VISUAL_MODE_LABELS[mode]}`;
   }
-  // Show/hide the correct canvas
-  const threeCanvas  = document.getElementById('three-canvas');
-  const liquidCanvas = document.getElementById('liquid-canvas');
+  // Canvas modes crossfade; Planet ↔ Pulse Wire blends inside the shader.
   const isLiquid = mode === 'liquidAura';
-  if (threeCanvas)  threeCanvas.style.display  = isLiquid ? 'none'  : 'block';
-  if (liquidCanvas) liquidCanvas.style.display = isLiquid ? 'block' : 'none';
+  document.body.classList.toggle('visual-liquid', isLiquid);
+  if (previousMode !== mode && (previousMode === 'liquidAura' || isLiquid)) {
+    _visualTransitionUntil = performance.now() + (reducedMotionQuery.matches ? 110 : 320);
+  }
   // Reset liquid frame timer so first frame has zero dt
   if (isLiquid) _laLastFrameTime = 0;
   if (!silent) showToast(`视觉模式：${VISUAL_MODE_LABELS[mode]}`);
@@ -4034,7 +4149,46 @@ function saveResume() {
   } catch (_) { /* quota exceeded — skip this save */ }
 }
 
-setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
+const _resumeSaveTimer = setInterval(() => { if (!audio.paused) saveResume(); }, 5000);
+
+function teardownVisualizer() {
+  if (_visualizerDisposed) return;
+  _visualizerDisposed = true;
+  cancelAnimationFrame(_threeRafId);
+  cancelAnimationFrame(_liquidRafId);
+  clearInterval(_resumeSaveTimer);
+  window.removeEventListener('resize', _resizeThreeCanvas);
+  window.removeEventListener('resize', _resizeLiquidCanvas);
+
+  // Dispose shared GPU resources exactly once, including material textures.
+  const geometries = new Set();
+  const materials = new Set();
+  const textures = new Set();
+  scene.traverse(object => {
+    if (object.geometry) geometries.add(object.geometry);
+    const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    objectMaterials.filter(Boolean).forEach(material => {
+      materials.add(material);
+      Object.values(material).forEach(value => { if (value?.isTexture) textures.add(value); });
+      Object.values(material.uniforms || {}).forEach(uniform => {
+        if (uniform?.value?.isTexture) textures.add(uniform.value);
+      });
+    });
+  });
+  // haloMat is intentionally unattached (kept as an environment-colour
+  // compatibility alias), so scene traversal cannot discover it.
+  materials.add(haloMat);
+  textures.forEach(texture => texture.dispose());
+  geometries.forEach(geometry => geometry.dispose());
+  materials.forEach(material => material.dispose());
+  renderer.renderLists?.dispose();
+  renderer.dispose();
+
+  try { sourceNode?.disconnect(); } catch (_) {}
+  try { analyser?.disconnect(); } catch (_) {}
+  try { compressor?.disconnect(); } catch (_) {}
+  if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+}
 
 // Restore on startup
 (function restoreState() {
