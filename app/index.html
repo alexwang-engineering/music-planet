@@ -3000,8 +3000,14 @@ function initAudio() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     sourceNode = audioCtx.createMediaElementSource(audio);
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.82;
+    // Small FFT + zero native smoothing: the beat detector below already does
+    // its own tuned per-band attack/release envelopes and adaptive-threshold
+    // flux detection, so the AnalyserNode should hand over raw, fast data
+    // instead of pre-blurring transients with its own single-pole smoothing.
+    // 1024 @ 44.1kHz ≈ 23ms analysis window (was 2048 ≈ 46ms) — halves the
+    // inherent latency before a kick attack is even visible to the detector.
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0;
     analyser.minDecibels = -90;
     analyser.maxDecibels = -10;   // KEY FIX: default -30 saturates all music
     compressor = audioCtx.createDynamicsCompressor();
