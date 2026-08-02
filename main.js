@@ -2,10 +2,15 @@ const { app, BrowserWindow, shell, nativeTheme } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const http = require('http')
+const {
+  LOOPBACK_HOST,
+  buildRendererQuery,
+  reserveLoopbackPort,
+} = require('./api-runtime')
 
 let mainWindow = null
 let apiProcess = null
-const API_PORT = 3000
+let apiPort = null
 
 function sanitizeApiLog(chunk) {
   return chunk
@@ -17,7 +22,7 @@ function sanitizeApiLog(chunk) {
 }
 
 // ── Start the NetEase API server ─────────────────────────────────────
-function startApiServer() {
+function startApiServer(port) {
   // Dev: node_modules next to main.js.
   // Packaged: a standalone production install (predist stages api-staging/node_modules,
   // extraResources ships it as Resources/api-runtime/node_modules). The package must sit
@@ -26,38 +31,44 @@ function startApiServer() {
     ? path.join(process.resourcesPath, 'api-runtime', 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
     : path.join(__dirname, 'node_modules', 'NeteaseCloudMusicApi', 'app.js')
 
-  apiProcess = spawn(process.execPath, [apiEntry], {
+  const child = spawn(process.execPath, [apiEntry], {
     env: {
       ...process.env,
-      PORT: String(API_PORT),
-      HOST: '127.0.0.1',
+      PORT: String(port),
+      HOST: LOOPBACK_HOST,
       ELECTRON_RUN_AS_NODE: '1',
     },
     stdio: 'pipe',
   })
+  apiProcess = child
 
-  apiProcess.stdout?.on('data', d => {
+  child.stdout?.on('data', d => {
     const msg = sanitizeApiLog(d).trim()
     if (msg) console.log('[API]', msg)
   })
-  apiProcess.stderr?.on('data', d => {
+  child.stderr?.on('data', d => {
     const msg = sanitizeApiLog(d).trim()
     if (msg) console.error('[API ERR]', msg)
   })
-  apiProcess.on('error', err => console.error('[API spawn error]', err))
+  child.on('error', err => console.error('[API spawn error]', err))
+  child.on('exit', (code, signal) => {
+    if (apiProcess === child) apiProcess = null
+    if (code && signal == null) console.error(`[API] exited with code ${code}`)
+  })
 }
 
 // ── Wait for API to respond ──────────────────────────────────────────
-function waitForApi(retries = 40, delay = 400) {
+function waitForApi(port, retries = 40, delay = 400) {
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      http.get(`http://127.0.0.1:${API_PORT}/search?keywords=test&limit=1`, res => {
+      const request = http.get(`http://${LOOPBACK_HOST}:${port}/search?keywords=test&limit=1`, res => {
         res.resume()
         resolve()
       }).on('error', () => {
         if (retries-- <= 0) return reject(new Error('API did not start'))
         setTimeout(attempt, delay)
       })
+      request.setTimeout(1200, () => request.destroy(new Error('API readiness timeout')))
     }
     attempt()
   })
@@ -65,7 +76,7 @@ function waitForApi(retries = 40, delay = 400) {
 
 // ── Create the main window (fixed proportions — per user request, do not
 // switch to work-area-percentage sizing or persisted bounds) ─────────────
-function createWindow() {
+function createWindow(port) {
   nativeTheme.themeSource = 'dark'
 
   mainWindow = new BrowserWindow({
@@ -84,10 +95,10 @@ function createWindow() {
     },
   })
 
-  const loadOptions = process.env.NEBULA_PERF_DEBUG === '1'
-    ? { query: { perf: '1' } }
-    : undefined
-  mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'), loadOptions)
+  const query = buildRendererQuery(port, {
+    performanceDebug: process.env.NEBULA_PERF_DEBUG === '1',
+  })
+  mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'), { query })
 
   // Open external links in system browser, not in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -100,21 +111,25 @@ function createWindow() {
 
 // ── App lifecycle ────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  startApiServer()
+  apiPort = await reserveLoopbackPort()
+  startApiServer(apiPort)
 
   try {
-    await waitForApi()
-    console.log(`[App] API ready on :${API_PORT}`)
+    await waitForApi(apiPort)
+    console.log(`[App] API ready on :${apiPort}`)
   } catch (e) {
     // Not fatal — app shows "start API" message itself
     console.warn('[App] API did not respond in time; opening anyway')
   }
 
-  createWindow()
+  createWindow(apiPort)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiPort)
   })
+}).catch(error => {
+  console.error('[App] failed to start', error)
+  app.quit()
 })
 
 app.on('window-all-closed', () => {

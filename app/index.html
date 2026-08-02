@@ -994,22 +994,15 @@
       left: 12px;
       right: 12px;
       top: 12px;
-      bottom: auto;
+      bottom: calc(var(--bar-h) + 24px);
       width: auto;
-      height: 92px;
+      height: auto;
     }
 
     #search-wrap { padding: 12px; }
-    #panel-tabs,
-    #playlist-wrap,
-    #mylist-wrap { display: none !important; }
 
     #right-panel {
-      left: 12px;
-      right: 12px;
-      top: 116px;
-      bottom: calc(var(--bar-h) + 24px);
-      width: auto;
+      display: none;
     }
 
     #right-orbit-card { padding: 14px 16px 12px; }
@@ -1050,9 +1043,7 @@
       gap: 6px;
     }
 
-    .theme-dots,
-    .volume-wrap,
-    #btn-sleep { display: none; }
+    .volume-wrap { display: none; }
   }
 
   /* === TOAST === */
@@ -1587,7 +1578,7 @@
 </div>
 
 <!-- QR LOGIN MODAL -->
-<div id="qr-modal" class="hidden motion-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true" inert>
+<div id="qr-modal" class="hidden motion-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-hidden="true" tabindex="-1" inert>
   <div id="qr-box">
     <h3 id="login-title">登录网易云音乐</h3>
     <div class="login-tabs" role="tablist" aria-label="登录方式">
@@ -1599,7 +1590,7 @@
       <img id="qr-img" src="" alt="网易云音乐登录二维码">
       <div id="qr-status" role="status" aria-live="polite" aria-atomic="true">正在生成二维码...</div>
     </div>
-    <form id="phone-section" role="tabpanel" aria-labelledby="tab-phone" hidden inert>
+    <form id="phone-section" role="tabpanel" aria-labelledby="tab-phone" aria-hidden="true" novalidate hidden inert>
       <p>输入网易云音乐账号密码</p>
       <label class="sr-only" for="phone-input">手机号</label>
       <input class="login-field" id="phone-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="手机号" required aria-describedby="phone-status" aria-invalid="false">
@@ -1650,6 +1641,12 @@ import {
   playNext as insertQueueNext,
   undoQueueAction,
 } from './queue-actions.mjs';
+import {
+  calculateCenteredLyricScrollTop,
+  findActiveLyricIndex,
+} from './lyric-sync.mjs';
+import { resolveLoopbackApiBase } from './api-endpoint.mjs';
+import { createLatestRequestCoordinator } from './latest-request.mjs';
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -1663,6 +1660,7 @@ const FOCUSABLE_SELECTOR = [
 function getFocusableElements(container) {
   return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(element => (
     !element.hidden
+    && element.tabIndex >= 0
     && !element.closest('[hidden], [inert], [aria-hidden="true"]')
     && getComputedStyle(element).visibility !== 'hidden'
   ));
@@ -1968,6 +1966,7 @@ function resizeVisualSurfaces() {
   _resizeLiquidCanvas();
   clampPanelWidths();
   _progressRect = null;
+  requestVisualFrame();
 }
 window.addEventListener('resize', () => {
   if (resizeFrame) cancelAnimationFrame(resizeFrame);
@@ -2973,6 +2972,8 @@ const playbackProgress = createPlaybackProgressController({
 });
 reducedMotionQuery.addEventListener?.('change', event => {
   playbackProgress.setReducedMotion(event.matches);
+  if (event.matches) requestVisualFrame();
+  else startAnimationLoop();
 });
 window.addEventListener('beforeunload', () => playbackProgress.destroy(), { once: true });
 
@@ -3432,6 +3433,11 @@ function _renderLiquidAura(dt) {
 
 let animationFrameId = 0;
 
+function requestVisualFrame() {
+  if (!reducedMotionQuery.matches || animationFrameId || document.hidden) return;
+  animationFrameId = requestAnimationFrame(animate);
+}
+
 function animate(frameTimestamp) {
   animationFrameId = 0;
   perfMonitor.beginFrame(frameTimestamp);
@@ -3441,9 +3447,31 @@ function animate(frameTimestamp) {
     perfMonitor.resetTimestamp();
     return;
   }
-  animationFrameId = requestAnimationFrame(animate);
+
+  const reducedVisualMotion = reducedMotionQuery.matches;
+  if (!reducedVisualMotion) {
+    animationFrameId = requestAnimationFrame(animate);
+  }
 
   const delta = Math.min(clock.getDelta(), 0.05);
+  if (reducedVisualMotion) {
+    if (state.visualMode === 'liquidAura') {
+      _renderLiquidAura(0);
+    } else {
+      sphereMat.uniforms.uAudioLevel.value = 0;
+      sphereMat.uniforms.uBass.value = 0;
+      sphereMat.uniforms.uMid.value = 0;
+      sphereMat.uniforms.uHigh.value = 0;
+      sphereMat.uniforms.uBeatFlash.value = 0;
+      sphereMat.uniforms.uFlux.value = 0;
+      sphereMat.uniforms.uColor1.value.copy(_tColor1);
+      sphereMat.uniforms.uColor2.value.copy(_tColor2);
+      renderer.render(scene, camera);
+    }
+    perfMonitor.endFrame(renderer);
+    return;
+  }
+
   const frame60 = delta * 60;
   time += delta;
 
@@ -3898,12 +3926,13 @@ function applyAccentColor(cssColor, threeColor) {
   _tColor2.setHSL(h, 1.00, 0.50);
   // Feed raw album color to Liquid Aura (clamped independently inside updateLiquidAccent)
   updateLiquidAccent(threeColor);
+  requestVisualFrame();
 }
 
 // ===================================================================
 // API LAYER
 // ===================================================================
-const API = 'http://127.0.0.1:3000';
+const API = resolveLoopbackApiBase(window.location.search);
 
 // Login session cookie — captured from QR check body and persisted in localStorage.
 // Passed explicitly as ?cookie= on every request so the API server forwards MUSIC_U to NetEase.
@@ -3960,7 +3989,7 @@ async function searchSongs(q) {
   return data.result?.songs || [];
 }
 
-async function getSongUrl(id) {
+async function getSongUrl(id, { signal = null } = {}) {
   // Try 320k first, then fall back through quality levels
   const qualities = [
     `/song/url/v1?id=${id}&level=exhigh`,
@@ -3969,21 +3998,24 @@ async function getSongUrl(id) {
   ];
   for (const q of qualities) {
     try {
-      const data = await api(q);
+      const data = await api(q, { signal });
       const url = data.data?.[0]?.url;
       if (url) return url;
-    } catch (e) { /* try next */ }
+    } catch (error) {
+      if (error.name === 'AbortError') throw error;
+      // A quality endpoint may fail independently; try the next one.
+    }
   }
   return null;
 }
 
-async function getSongDetail(id) {
-  const data = await api(`/song/detail?ids=${id}`);
+async function getSongDetail(id, { signal = null } = {}) {
+  const data = await api(`/song/detail?ids=${id}`, { signal });
   return data.songs?.[0] || null;
 }
 
-async function getLyric(id) {
-  const data = await api(`/lyric?id=${id}`);
+async function getLyric(id, { signal = null } = {}) {
+  const data = await api(`/lyric?id=${id}`, { signal });
   return { lrc: data.lrc?.lyric || '', tlyric: data.tlyric?.lyric || '' };
 }
 
@@ -4032,11 +4064,16 @@ function scrollLyricIntoView(line) {
   if (!line || performance.now() < lyricsManualUntil) return;
   cancelLyricScroll();
   const wrap = lyricsWrapElement;
-  const maxScrollTop = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-  const target = Math.max(
-    0,
-    Math.min(maxScrollTop, line.offsetTop - (wrap.clientHeight - line.offsetHeight) / 2),
-  );
+  const wrapRect = wrap.getBoundingClientRect();
+  const lineRect = line.getBoundingClientRect();
+  const target = calculateCenteredLyricScrollTop({
+    scrollTop: wrap.scrollTop,
+    viewportTop: wrapRect.top + wrap.clientTop,
+    viewportHeight: wrap.clientHeight,
+    contentHeight: wrap.scrollHeight,
+    lineTop: lineRect.top,
+    lineHeight: lineRect.height,
+  });
   const start = wrap.scrollTop;
   const distance = target - start;
   const duration = cssCustomTimeMs('--motion-scroll', 420);
@@ -4085,11 +4122,7 @@ lyricsWrapElement.addEventListener('pointerdown', () => {
 
 function syncLyrics() {
   if (!state.lyrics.length) return;
-  const t = audio.currentTime;
-  let idx = -1;
-  for (let i = state.lyrics.length - 1; i >= 0; i--) {
-    if (t >= state.lyrics[i].time) { idx = i; break; }
-  }
+  const idx = findActiveLyricIndex(state.lyrics, audio.currentTime);
   if (idx !== state.currentLyricIndex) {
     state.currentLyricIndex = idx;
     renderLyricHighlight(idx);
@@ -4370,15 +4403,28 @@ window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextM
 // ===================================================================
 // PLAY SONG
 // ===================================================================
-let loading = false;
+const playbackRequests = createLatestRequestCoordinator();
+let activePlaybackRequest = null;
+let playbackErrorTimer = 0;
+
+function isAbortError(error) {
+  return error?.name === 'AbortError';
+}
+
+function clearPlaybackErrorTimer() {
+  if (!playbackErrorTimer) return;
+  clearTimeout(playbackErrorTimer);
+  playbackErrorTimer = 0;
+}
 
 async function playIndex(idx, _skipCount = 0) {
-  if (loading) return;
   if (idx < 0 || idx >= state.playlist.length) return;
+  const playbackRequest = playbackRequests.begin();
+  activePlaybackRequest = playbackRequest;
+  clearPlaybackErrorTimer();
 
   document.querySelector('.bar-song-info').classList.add('fade-out');
 
-  loading = true;
   state.currentIndex = idx;
   updatePlaylistActive(idx);
   if (_queueOpen) renderQueue();
@@ -4399,14 +4445,23 @@ async function playIndex(idx, _skipCount = 0) {
 
   try {
     const [urlData, detail, lyricStr] = await Promise.all([
-      getSongUrl(songId).catch(() => null),
-      getSongDetail(songId).catch(() => null),
-      getLyric(songId).catch(() => ({ lrc: '', tlyric: '' })),
+      getSongUrl(songId, { signal: playbackRequest.signal }).catch(error => {
+        if (isAbortError(error)) throw error;
+        return null;
+      }),
+      getSongDetail(songId, { signal: playbackRequest.signal }).catch(error => {
+        if (isAbortError(error)) throw error;
+        return null;
+      }),
+      getLyric(songId, { signal: playbackRequest.signal }).catch(error => {
+        if (isAbortError(error)) throw error;
+        return { lrc: '', tlyric: '' };
+      }),
     ]);
+    if (!playbackRequests.isCurrent(playbackRequest)) return;
 
     if (!urlData) {
       document.querySelector('.bar-song-info').classList.remove('fade-out');
-      loading = false;
       // Stop cascading if we've skipped several unplayable songs in a row.
       if (_skipCount >= 4) {
         showToast('连续多首无法播放，已停止');
@@ -4431,7 +4486,11 @@ async function playIndex(idx, _skipCount = 0) {
       rightArt.src = artUrl + '?param=512y512';
       rightArt.style.display = 'block';
       rightPlaceholder.style.display = 'none';
-      extractAccentColor(artUrl + '?param=50y50', applyAccentColor);
+      extractAccentColor(artUrl + '?param=50y50', (cssColor, threeColor) => {
+        if (playbackRequests.isCurrent(playbackRequest)) {
+          applyAccentColor(cssColor, threeColor);
+        }
+      });
     } else {
       barArt.src = '';
       barArt.style.display = 'none';
@@ -4470,21 +4529,24 @@ async function playIndex(idx, _skipCount = 0) {
     // Crossfade: fade out → switch → fade in
     initAudio();
     if (!audio.paused && audio.currentTime > 0) {
-      await fadeTo(0, 280);
+      const completed = await fadeTo(0, 280);
+      if (!completed || !playbackRequests.isCurrent(playbackRequest)) return;
     }
+    if (!playbackRequests.isCurrent(playbackRequest)) return;
+    _corsRetriedSrc = '';
     audio.crossOrigin = 'anonymous';  // re-arm viz even after a per-song CORS fallback
     audio.src = urlData;
     audio.volume = 0;
     await audio.play().catch(e => console.warn('Play error:', e));
+    if (!playbackRequests.isCurrent(playbackRequest)) return;
     fadeTo(state.volume, 350);
     addToHistory(song);
 
   } catch (err) {
+    if (isAbortError(err) || !playbackRequests.isCurrent(playbackRequest)) return;
     showToast('加载失败，请检查 API 服务');
     console.error(err);
   }
-
-  loading = false;
 }
 
 // ===================================================================
@@ -4547,6 +4609,8 @@ audio.addEventListener('ended', () => {
 // the same source once without it — playback beats visualization.
 let _corsRetriedSrc = '';
 audio.addEventListener('error', () => {
+  const failedRequest = activePlaybackRequest;
+  const failedSrc = audio.src;
   if (audio.crossOrigin && audio.src && _corsRetriedSrc !== audio.src) {
     _corsRetriedSrc = audio.src;
     const src = audio.src;
@@ -4560,7 +4624,12 @@ audio.addEventListener('error', () => {
   }
   audio.crossOrigin = 'anonymous';  // restore for the next song
   showToast('播放出错，跳至下一首');
-  setTimeout(() => playIndex(state.currentIndex + 1), 1000);
+  clearPlaybackErrorTimer();
+  playbackErrorTimer = window.setTimeout(() => {
+    playbackErrorTimer = 0;
+    if (!playbackRequests.isCurrent(failedRequest) || audio.src !== failedSrc) return;
+    playIndex(state.currentIndex + 1);
+  }, 1000);
 });
 
 // Save position when pausing / quitting — previously only the 5s interval while
@@ -4755,6 +4824,7 @@ function applyTheme(name) {
     applyEnvColor(themeColor);
     updateLiquidAccent(themeColor);
   }
+  requestVisualFrame();
 }
 
 document.querySelectorAll('.theme-dot').forEach(dot => {
@@ -4804,6 +4874,7 @@ function applyVisualMode(mode, silent = false) {
     }, cssCustomTimeMs('--motion-view', 340) + 34);
   }
   if (!silent) showToast(`视觉模式：${VISUAL_MODE_LABELS[mode]}`);
+  requestVisualFrame();
 }
 
 document.getElementById('btn-visual')?.addEventListener('click', (e) => {
@@ -5441,6 +5512,8 @@ window.addEventListener('keydown', (e) => {
 
 // Volume
 const volSlider = document.getElementById('volume-slider');
+const settingsVolSlider = document.getElementById('settings-volume-slider');
+const settingsVolValue = document.getElementById('settings-volume-value');
 const _volIcon = document.getElementById('btn-mute');
 
 function updateVolumeUI() {
@@ -5450,17 +5523,28 @@ function updateVolumeUI() {
   _volIcon.setAttribute('aria-pressed', String(muted));
   _volIcon.setAttribute('aria-label', muted ? '取消静音' : '静音');
   _volIcon.title = muted ? '取消静音' : '静音';
+  volSlider.value = String(value);
   volSlider.setAttribute('aria-valuetext', muted ? '静音' : `${value}%`);
+  settingsVolSlider.value = String(value);
+  settingsVolSlider.setAttribute('aria-valuetext', muted ? '静音' : `${value}%`);
+  settingsVolValue.textContent = muted ? '静音' : `${value}%`;
 }
 
-volSlider.value = state.volume * 100;
-updateVolumeUI();
-volSlider.addEventListener('input', () => {
-  state.volume = volSlider.value / 100;
+function setVolumeFromPercent(percent, { persist = true } = {}) {
+  const normalized = Math.min(100, Math.max(0, Number(percent) || 0));
+  state.volume = normalized / 100;
   _preMuteVolume = null;
   audio.volume = state.volume;
   updateVolumeUI();
-  savePrefs();
+  if (persist) savePrefs();
+}
+
+updateVolumeUI();
+volSlider.addEventListener('input', () => {
+  setVolumeFromPercent(volSlider.value);
+});
+settingsVolSlider.addEventListener('input', () => {
+  setVolumeFromPercent(settingsVolSlider.value);
 });
 
 // Mute toggle — click the speaker icon or press M
@@ -5474,7 +5558,6 @@ function toggleMute() {
     _preMuteVolume = null;
   }
   audio.volume = state.volume;
-  volSlider.value = state.volume * 100;
   updateVolumeUI();
   savePrefs();
   showToast(state.volume === 0 ? '静音 🔇' : `音量 ${Math.round(state.volume * 100)}%`);
@@ -5548,8 +5631,10 @@ let entityDetailRequestId = 0;
 let activeBrowseTransition = null;
 let browseTransitionGeneration = 0;
 let entityScrollCleanup = null;
+let searchAnnouncementTimer = 0;
 const searchFilterButtons = [...document.querySelectorAll('.search-filter')];
 const searchTypeButtons = [...document.querySelectorAll('.search-type')];
+const searchAnnouncer = document.getElementById('search-announcer');
 const searchTypeLabels = Object.freeze({
   song: '歌曲',
   [ENTITY_TYPES.ARTIST]: '歌手',
@@ -5563,6 +5648,14 @@ const compactNumberFormatter = new Intl.NumberFormat('zh-CN', {
 
 function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+function announceSearchStatus(message) {
+  clearTimeout(searchAnnouncementTimer);
+  searchAnnouncer.textContent = '';
+  searchAnnouncementTimer = window.setTimeout(() => {
+    searchAnnouncer.textContent = message;
+  }, 0);
 }
 
 function transitionBrowseContent(update, direction = 'replace') {
@@ -5663,6 +5756,7 @@ function renderCurrentSearch() {
     isPlayable: canPlaySearchSong,
   });
   renderSearchResults(groups, currentSearchQuery);
+  announceSearchStatus(`找到 ${groups.length} 组歌曲结果`);
 }
 
 function renderSearchSkeleton(entityType = currentSearchEntityType) {
@@ -5684,6 +5778,7 @@ function renderSearchSkeleton(entityType = currentSearchEntityType) {
       `).join('')}
     </div>
   `;
+  announceSearchStatus(`正在搜索${label}`);
 }
 
 function formatCompactNumber(value) {
@@ -5736,6 +5831,7 @@ function renderEntityPrompt() {
       <span>搜索你想找的${escHtml(label)}</span>
     </div>
   `;
+  announceSearchStatus(`请输入关键词搜索${label}`);
 }
 
 function renderEntitySearchResults(result) {
@@ -5746,6 +5842,7 @@ function renderEntitySearchResults(result) {
 
   if (!items.length) {
     wrap.innerHTML = `<div id="empty-state"><span>没有找到相关${escHtml(searchTypeLabels[currentSearchEntityType])}</span></div>`;
+    announceSearchStatus(`没有找到相关${searchTypeLabels[currentSearchEntityType]}`);
     return;
   }
 
@@ -5784,6 +5881,7 @@ function renderEntitySearchResults(result) {
     fragment.appendChild(button);
   });
   wrap.appendChild(fragment);
+  announceSearchStatus(`找到 ${items.length} 个${searchTypeLabels[currentSearchEntityType]}`);
 }
 
 function buildEntityHero(card) {
@@ -6006,6 +6104,7 @@ function selectSearchEntityType(type) {
   if (!Object.prototype.hasOwnProperty.call(searchTypeLabels, type)) return;
   if (type === currentSearchEntityType && !activeEntityDetail) return;
   searchRequestId++;
+  invalidateRecommendationRender();
   entityDetailRequestId++;
   cleanupEntityScroll();
   activeEntityDetail = null;
@@ -6033,6 +6132,7 @@ document.getElementById('search-input').addEventListener('input', (e) => {
   const q = e.target.value.trim();
   if (!q) {
     searchRequestId++;
+    invalidateRecommendationRender();
     entityDetailRequestId++;
     cleanupEntityScroll();
     currentSearchQuery = '';
@@ -6044,8 +6144,10 @@ document.getElementById('search-input').addEventListener('input', (e) => {
     updateSearchChrome();
     setSearchFiltersEnabled(false);
     // Show history in the browse list but leave the play queue untouched.
-    if (currentSearchEntityType === 'song') renderHistory();
-    else renderEntityPrompt();
+    transitionBrowseContent(() => {
+      if (currentSearchEntityType === 'song') renderHistory();
+      else renderEntityPrompt();
+    });
     return;
   }
   searchTimer = setTimeout(() => performSearch(q), 400);
@@ -6063,6 +6165,7 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
 async function performSearch(q) {
   const wrap = document.getElementById('playlist-wrap');
   const requestId = ++searchRequestId;
+  invalidateRecommendationRender();
   entityDetailRequestId++;
   cleanupEntityScroll();
   activeEntityDetail = null;
@@ -6106,7 +6209,10 @@ async function performSearch(q) {
       currentEntitySearchResults = null;
       setSearchFiltersEnabled(Boolean(songs.length));
       if (!songs.length) {
-        wrap.innerHTML = `<div id="empty-state"><span>没有找到 "${escHtml(currentSearchQuery)}"</span></div>`;
+        await transitionBrowseContent(() => {
+          wrap.innerHTML = `<div id="empty-state"><span>没有找到 "${escHtml(currentSearchQuery)}"</span></div>`;
+          announceSearchStatus(`没有找到 ${currentSearchQuery}`);
+        });
         return;
       }
       await transitionBrowseContent(renderCurrentSearch);
@@ -6126,13 +6232,16 @@ async function performSearch(q) {
     currentEntitySearchResults = null;
     setSearchFiltersEnabled(false);
     console.error(err);
-    if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
-      wrap.innerHTML = `<div id="status-msg">
-        音乐服务响应较慢，请按回车重试…
-      </div>`;
-    } else {
-      wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
-    }
+    await transitionBrowseContent(() => {
+      if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
+        wrap.innerHTML = `<div id="status-msg">
+          音乐服务响应较慢，请按回车重试…
+        </div>`;
+      } else {
+        wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
+      }
+      announceSearchStatus('搜索失败，请重试');
+    });
   }
 }
 
@@ -6178,6 +6287,7 @@ function hideToast(generation = toastGeneration) {
     if (generation !== toastGeneration) return;
     message.textContent = '';
     action.disabled = true;
+    action.hidden = true;
     action.tabIndex = -1;
     action.setAttribute('aria-hidden', 'true');
     toastActionHandler = null;
@@ -6219,6 +6329,7 @@ function showToast(msg, {
   }
   toastActionHandler = typeof onAction === 'function' ? onAction : null;
   action.disabled = !toastActionHandler;
+  action.hidden = !toastActionHandler;
   action.tabIndex = toastActionHandler ? 0 : -1;
   action.setAttribute('aria-hidden', String(!toastActionHandler));
   action.textContent = actionLabel || '撤销';
@@ -6297,6 +6408,7 @@ function renderHistory() {
     const idx = parseInt(el.dataset.histIdx);
     bindSongItem(el, playHistory[idx], () => playFromBrowse(playHistory, idx));
   });
+  announceSearchStatus(`最近播放 ${playHistory.length} 首歌曲`);
 }
 
 // ===================================================================
@@ -6305,17 +6417,38 @@ function renderHistory() {
 // something to play. Cached for the session.
 // ===================================================================
 let _recCache = null;
+let recommendationRequestId = 0;
+
+function invalidateRecommendationRender() {
+  recommendationRequestId += 1;
+}
+
+function isRecommendationSurfaceCurrent(requestId) {
+  return requestId === recommendationRequestId
+    && !document.getElementById('search-input').value.trim()
+    && currentSearchEntityType === 'song'
+    && !activeEntityDetail
+    && isSearchPanelActive();
+}
+
 async function renderRecommendations() {
   const wrap = document.getElementById('playlist-wrap');
-  if (_recCache) { _renderRecList(_recCache); return; }
+  const requestId = ++recommendationRequestId;
+  if (_recCache) {
+    if (isRecommendationSurfaceCurrent(requestId)) _renderRecList(_recCache);
+    return;
+  }
   wrap.innerHTML = `<div id="empty-state"><div class="spinner"></div></div>`;
+  announceSearchStatus('正在加载热门推荐');
   try {
     const data = await api('/top/song?type=0');
     const songs = (data.data || []).slice(0, 30);
     if (!songs.length) throw new Error('empty');
     _recCache = songs;
+    if (!isRecommendationSurfaceCurrent(requestId)) return;
     _renderRecList(songs);
   } catch (e) {
+    if (!isRecommendationSurfaceCurrent(requestId)) return;
     // Fall back to the original quiet empty state if the API isn't ready.
     wrap.innerHTML = `<div id="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
@@ -6356,6 +6489,7 @@ function _renderRecList(songs) {
     bindSongItem(div, song, () => playFromBrowse(songs, i));
     wrap.appendChild(div);
   });
+  announceSearchStatus(`已加载 ${songs.length} 首热门推荐`);
 }
 
 // Show history immediately on startup
@@ -7382,7 +7516,7 @@ async function startQrLogin() {
             status.textContent = '账号确认失败，请重新扫码';
             return;
           }
-          modal.classList.add('hidden');
+          closeLoginModal();
           showToast('登录成功，已解锁更多歌曲 🎵');
           return;
         } else if (code === 800) {
@@ -7411,24 +7545,55 @@ async function startQrLogin() {
 }
 
 // ── Login modal: open + tab switching ──────────────────────────────
+let loginReturnFocus = null;
+let loginFocusFrame = 0;
+
 function openLoginModal(tab = 'qr') {
   const modal = document.getElementById('qr-modal');
+  if (modal.classList.contains('hidden')) {
+    loginReturnFocus = document.activeElement;
+  }
+  if (loginFocusFrame) cancelAnimationFrame(loginFocusFrame);
   modal.classList.remove('hidden');
   modal.inert = false;
   modal.setAttribute('aria-hidden', 'false');
   switchLoginTab(tab);
+  loginFocusFrame = requestAnimationFrame(() => {
+    loginFocusFrame = 0;
+    if (modal.classList.contains('hidden') || modal.inert) return;
+    const activeTab = document.getElementById(tab === 'phone' ? 'tab-phone' : 'tab-qr');
+    activeTab.focus({ preventScroll: true });
+  });
 }
 
 function switchLoginTab(tab) {
-  document.getElementById('tab-qr').classList.toggle('active', tab === 'qr');
-  document.getElementById('tab-phone').classList.toggle('active', tab === 'phone');
+  const activeTab = tab === 'phone' ? 'phone' : 'qr';
+  const qrTab = document.getElementById('tab-qr');
+  const phoneTab = document.getElementById('tab-phone');
   const qrSection = document.getElementById('qr-section');
   const phoneSection = document.getElementById('phone-section');
-  qrSection.style.display  = tab === 'qr'    ? 'block' : 'none';
-  phoneSection.style.display = tab === 'phone' ? 'block' : 'none';
-  qrSection.inert = tab !== 'qr';
-  phoneSection.inert = tab !== 'phone';
-  if (tab === 'qr') {
+  const phoneSubmit = document.getElementById('phone-submit');
+  const qrSelected = activeTab === 'qr';
+  const phoneSelected = activeTab === 'phone';
+
+  qrTab.classList.toggle('active', qrSelected);
+  phoneTab.classList.toggle('active', phoneSelected);
+  qrTab.setAttribute('aria-selected', String(qrSelected));
+  phoneTab.setAttribute('aria-selected', String(phoneSelected));
+  qrTab.tabIndex = qrSelected ? 0 : -1;
+  phoneTab.tabIndex = phoneSelected ? 0 : -1;
+  qrSection.style.display = qrSelected ? 'block' : 'none';
+  phoneSection.style.display = phoneSelected ? 'block' : 'none';
+  qrSection.inert = !qrSelected;
+  phoneSection.inert = !phoneSelected;
+  qrSection.hidden = !qrSelected;
+  phoneSection.hidden = !phoneSelected;
+  qrSection.setAttribute('aria-hidden', String(!qrSelected));
+  phoneSection.setAttribute('aria-hidden', String(!phoneSelected));
+  phoneSubmit.disabled = false;
+  phoneSection.setAttribute('aria-busy', 'false');
+
+  if (qrSelected) {
     startQrLogin();
   } else {
     invalidateLoginAttempt();
@@ -7437,30 +7602,59 @@ function switchLoginTab(tab) {
   }
 }
 
-function closeLoginModal() {
+function closeLoginModal({ restoreFocus = true } = {}) {
   invalidateLoginAttempt();
   clearQrLoginSchedule();
+  if (loginFocusFrame) {
+    cancelAnimationFrame(loginFocusFrame);
+    loginFocusFrame = 0;
+  }
   const modal = document.getElementById('qr-modal');
+  const phoneSection = document.getElementById('phone-section');
+  document.getElementById('phone-submit').disabled = false;
+  phoneSection.setAttribute('aria-busy', 'false');
   modal.classList.add('hidden');
   modal.inert = true;
   modal.setAttribute('aria-hidden', 'true');
+  if (
+    restoreFocus
+    && loginReturnFocus instanceof HTMLElement
+    && loginReturnFocus.isConnected
+  ) {
+    loginReturnFocus.focus({ preventScroll: true });
+  }
+  loginReturnFocus = null;
 }
 
 document.getElementById('login-btn').addEventListener('click', () => openLoginModal('qr'));
 document.getElementById('tab-qr').addEventListener('click',    () => switchLoginTab('qr'));
 document.getElementById('tab-phone').addEventListener('click', () => switchLoginTab('phone'));
 document.getElementById('qr-close').addEventListener('click', closeLoginModal);
+document.getElementById('qr-modal').addEventListener('keydown', event => {
+  trapTabWithin(event, event.currentTarget);
+});
 
 // ── Phone / password login ──────────────────────────────────────────
-document.getElementById('phone-submit').addEventListener('click', async () => {
-  const phone    = document.getElementById('phone-input').value.trim();
-  const password = document.getElementById('password-input').value;
+document.getElementById('phone-section').addEventListener('submit', async event => {
+  event.preventDefault();
+  const phoneInput = document.getElementById('phone-input');
+  const passwordInput = document.getElementById('password-input');
+  const phone = phoneInput.value.trim();
+  const password = passwordInput.value;
   const statusEl = document.getElementById('phone-status');
-  if (!phone || !password) { statusEl.textContent = '请填写手机号和密码'; return; }
+  phoneInput.setAttribute('aria-invalid', String(!phone));
+  passwordInput.setAttribute('aria-invalid', String(!password));
+  if (!phone || !password) {
+    statusEl.textContent = '请填写手机号和密码';
+    (phone ? passwordInput : phoneInput).focus({ preventScroll: true });
+    return;
+  }
   const submit = document.getElementById('phone-submit');
+  const form = event.currentTarget;
   const loginAttempt = beginLoginAttempt();
   clearQrLoginSchedule();
   submit.disabled = true;
+  form.setAttribute('aria-busy', 'true');
   statusEl.textContent = '登录中...';
   try {
     const data = await api(
@@ -7487,7 +7681,7 @@ document.getElementById('phone-submit').addEventListener('click', async () => {
         statusEl.textContent = '账号确认失败，请重试';
         return;
       }
-      document.getElementById('qr-modal').classList.add('hidden');
+      closeLoginModal();
       showToast('登录成功，已解锁完整曲库 🎵');
     } else {
       statusEl.textContent = data.message || '账号或密码错误，请重试';
@@ -7497,7 +7691,10 @@ document.getElementById('phone-submit').addEventListener('click', async () => {
       statusEl.textContent = '登录失败：' + e.message;
     }
   } finally {
-    if (isCurrentLoginAttempt(loginAttempt)) submit.disabled = false;
+    if (isCurrentLoginAttempt(loginAttempt)) {
+      submit.disabled = false;
+      form.setAttribute('aria-busy', 'false');
+    }
   }
 });
 

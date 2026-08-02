@@ -21,7 +21,7 @@ in a custom Three.js/WebGL player interface and packages as a macOS application.
 
 ## How it works
 
-- `main.js` is the Electron main process. On launch it spawns a local instance of the [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) (an unofficial NetEase Cloud Music API wrapper) on `127.0.0.1:3000`, waits for it to become ready, then opens the app window.
+- `main.js` is the Electron main process. On launch it reserves an available loopback port, spawns a private local instance of the [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) (an unofficial NetEase Cloud Music API wrapper), waits for it to become ready, and passes that port to the renderer before opening the app window.
 - `app/index.html` is the renderer — the player UI, built with Three.js/WebGL for the 3D visuals.
 - API request/response logs are sanitized before being printed (cookies redacted) since NetEase session cookies can appear in query strings.
 
@@ -54,7 +54,7 @@ open "dist/mac-arm64/Nebula.app"   # Apple silicon
 open "dist/mac/Nebula.app"         # Intel
 ```
 
-On first launch the app spawns the bundled NetEase API on `127.0.0.1:3000`,
+On first launch the app spawns the bundled NetEase API on an available `127.0.0.1` port,
 waits for it to become ready, then opens the player window — no separate server
 step is needed for the packaged build.
 
