@@ -395,3 +395,12 @@
 - 自动测试增加到 `110/110`，renderer module syntax、`git diff --check` 与运行时高危审计全部通过。
 - 源码版播放真实歌曲时线框、歌词和播放链路同时工作，约 `60.0fps / CPU p99 1.1ms / miss 0.0%`；arm64 打包版线框约 `60.0fps / CPU p99 1.4ms / miss 0.0%`。
 - `dist/mac-arm64/Nebula.app` 已验证为 arm64、包含随包 API，且 `index.html`、`experience.css`、`wireframe-audio.mjs` 与源码逐字一致；按计划暂不覆盖桌面旧版。
+
+### 冷启动品牌画面（2026-08-03）
+
+- 冷启动立即显示独立、轻量且完全本地的 Nebula 启动画面，原先不可见的 API 等待现在有明确反馈。
+- 启动画面与本地 API、隐藏主窗口并行准备，不用固定长延迟模拟加载；API 和主文档就绪后开始交接。
+- 紫色线框星体、品牌文字与状态点只使用 CSS/SVG；动画限制在 `transform + opacity`，不引入 Three.js、音频或第二个长期 RAF。
+- 启动画面至少显示 `1050ms`，随后用基于真实时间的 `360ms` 双窗口交叉淡化；reduced-motion 下分别缩短到 `240ms / 80ms`。
+- 隐藏主窗口以 `did-finish-load` 作为就绪信号，避免等待被节能策略暂停的隐藏 WebGL 首帧；实测完整冷启动画面约 `4.4s`，主要覆盖真实 API 启动时间。
+- 新增 `NEBULA_SPLASH_DEBUG=1` 视觉验收入口，可把 splash 保持五秒而不改变正式启动时序。

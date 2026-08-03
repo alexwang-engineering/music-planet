@@ -34,6 +34,10 @@ npm install
 npm start
 ```
 
+For visual QA of the cold-start screen, keep it visible for five seconds with
+`NEBULA_SPLASH_DEBUG=1 npm start`. Normal launches hand off as soon as the API
+and main window are ready, after a short minimum brand moment.
+
 ## Build a distributable
 
 ```bash

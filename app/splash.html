@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nebula 正在启动</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --violet: #b829e3;
+      --blue: #6557ff;
+      --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+      user-select: none;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid rgba(190, 151, 255, 0.16);
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(119, 37, 185, 0.20), transparent 36%),
+        radial-gradient(circle at 18% 12%, rgba(78, 62, 222, 0.13), transparent 34%),
+        linear-gradient(145deg, rgba(11, 10, 25, 0.98), rgba(4, 4, 13, 0.99));
+      box-shadow:
+        0 28px 80px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255, 255, 255, 0.035);
+      -webkit-app-region: drag;
+    }
+
+    .stage::before,
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .stage::before {
+      opacity: 0.52;
+      background-image:
+        radial-gradient(circle at 14% 24%, rgba(255,255,255,.72) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 83% 19%, rgba(190,151,255,.70) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 72% 72%, rgba(255,255,255,.48) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 28% 79%, rgba(120,108,255,.75) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 91% 54%, rgba(255,255,255,.44) 0 1px, transparent 1.5px);
+    }
+
+    .stage::after {
+      border-radius: inherit;
+      background: linear-gradient(115deg, transparent 22%, rgba(255,255,255,.025) 48%, transparent 72%);
+      transform: translateX(-80%);
+      animation: glass-sweep 2.8s var(--ease-move) infinite;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      margin-top: -8px;
+    }
+
+    .orb-wrap {
+      position: relative;
+      width: 146px;
+      height: 146px;
+      opacity: 0;
+      transform: translateY(10px) scale(.90);
+      animation: orb-enter 720ms var(--ease-enter) 80ms forwards;
+    }
+
+    .orb-wrap::before,
+    .orb-wrap::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .orb-wrap::before {
+      inset: 22px;
+      background: radial-gradient(circle, rgba(184,41,227,.18), rgba(101,87,255,.06) 48%, transparent 72%);
+      box-shadow: 0 0 42px rgba(184, 41, 227, .18);
+      animation: core-breathe 2.2s ease-in-out infinite;
+    }
+
+    .orb-wrap::after {
+      inset: 7px;
+      border: 1px solid rgba(184, 41, 227, .18);
+      transform: rotate(-18deg) scaleY(.42);
+      animation: orbit-breathe 2.6s ease-in-out infinite;
+    }
+
+    .orb {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      filter: drop-shadow(0 0 8px rgba(184, 41, 227, .32));
+    }
+
+    .geometry {
+      transform-origin: 100px 100px;
+      animation: orb-turn 7s linear infinite;
+    }
+
+    .geometry path,
+    .geometry polygon,
+    .geometry circle {
+      vector-effect: non-scaling-stroke;
+    }
+
+    .brand {
+      margin-top: 9px;
+      color: rgba(255, 255, 255, .94);
+      font-size: 26px;
+      font-weight: 650;
+      letter-spacing: .34em;
+      line-height: 1;
+      text-indent: .34em;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: text-enter 620ms var(--ease-enter) 230ms forwards;
+    }
+
+    .tagline {
+      margin-top: 8px;
+      color: rgba(206, 197, 231, .50);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: .28em;
+      text-transform: uppercase;
+      opacity: 0;
+      animation: fade-enter 520ms ease-out 360ms forwards;
+    }
+
+    .status {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      color: rgba(205, 195, 226, .46);
+      font-size: 10px;
+      letter-spacing: .12em;
+      opacity: 0;
+      animation: fade-enter 420ms ease-out 480ms forwards;
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .dots i {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--violet);
+      opacity: .25;
+      animation: dot-pulse 1.1s ease-in-out infinite;
+    }
+
+    .dots i:nth-child(2) { animation-delay: 120ms; }
+    .dots i:nth-child(3) { animation-delay: 240ms; }
+
+    @keyframes orb-enter {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes text-enter {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fade-enter { to { opacity: 1; } }
+    @keyframes orb-turn { to { transform: rotate(360deg); } }
+
+    @keyframes core-breathe {
+      50% { opacity: .68; transform: scale(1.08); }
+    }
+
+    @keyframes orbit-breathe {
+      50% { opacity: .55; transform: rotate(-12deg) scale(1.05, .46); }
+    }
+
+    @keyframes dot-pulse {
+      50% { opacity: 1; transform: translateY(-2px); }
+    }
+
+    @keyframes glass-sweep {
+      0%, 28% { transform: translateX(-80%); opacity: 0; }
+      48% { opacity: 1; }
+      70%, 100% { transform: translateX(80%); opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stage::after,
+      .geometry,
+      .orb-wrap::before,
+      .orb-wrap::after,
+      .dots i {
+        animation: none;
+      }
+
+      .orb-wrap,
+      .brand,
+      .tagline,
+      .status {
+        animation-duration: 80ms;
+        animation-delay: 0ms;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" aria-label="Nebula 正在启动">
+    <div class="content">
+      <div class="orb-wrap" aria-hidden="true">
+        <svg class="orb" viewBox="0 0 200 200" fill="none">
+          <defs>
+            <linearGradient id="wire" x1="35" y1="28" x2="165" y2="172" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#d868f4"/>
+              <stop offset=".48" stop-color="#b829e3"/>
+              <stop offset="1" stop-color="#6557ff"/>
+            </linearGradient>
+          </defs>
+          <g class="geometry" stroke="url(#wire)" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="100" cy="100" r="69" stroke-opacity=".28"/>
+            <polygon points="100,27 157,57 170,119 129,168 66,164 29,111 45,53" stroke-width="1.4"/>
+            <path d="M100 27 92 76 45 53M100 27l31 54 26-24M157 57l-26 24 39 38M170 119l-54 1 13 48M129 168l-13-48-50 44M66 164l14-47-51-6M29 111l51 6 12-41M92 76l39 5-15 39-36-3 12-41Z" stroke-opacity=".82"/>
+            <path d="M45 53l35 64m77-60-77 60m90 2L92 76m37 92L92 76m-26 88 65-83M29 111l87 9" stroke-opacity=".36"/>
+          </g>
+        </svg>
+      </div>
+      <div class="brand">NEBULA</div>
+      <div class="tagline">Music in motion</div>
+    </div>
+    <div class="status" role="status" aria-live="polite">
+      <span>正在唤醒你的宇宙</span>
+      <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  </main>
+</body>
+</html>
