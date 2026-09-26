@@ -1287,6 +1287,105 @@
     transition: width 0.06s linear;
   }
 
+  /* === CINEMATIC FOCUS SHELL === */
+  #left-panel, #right-panel {
+    width: 320px;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+  }
+  #left-panel { transform: translateX(calc(-100% - 32px)); }
+  #right-panel { transform: translateX(calc(100% + 32px)); }
+  body.browse-open #left-panel,
+  body.now-playing-open #right-panel {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #btn-browse {
+    position: fixed;
+    top: 42px;
+    left: 16px;
+    z-index: 30;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    background: rgba(10,7,18,0.66);
+    color: rgba(255,255,255,0.76);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.26);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+  }
+  #btn-browse:hover, #btn-browse.active { color: #fff; border-color: var(--accent-glow); background: rgba(255,255,255,0.09); }
+  #browse-close, #now-playing-close {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255,255,255,0.40);
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  #browse-close:hover, #now-playing-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  #browse-close { flex-shrink: 0; }
+  #right-orbit-card { position: relative; }
+  #now-playing-close { position: absolute; right: 10px; top: 10px; }
+
+  .bar-song-info {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .bar-song-info:focus-visible, #btn-browse:focus-visible, #btn-more:focus-visible {
+    outline: 2px solid var(--accent2);
+    outline-offset: 3px;
+  }
+  .bar-song-info:hover #bar-title { color: var(--accent2); }
+
+  #btn-more { width: 28px; height: 28px; color: rgba(255,255,255,0.65); }
+  #btn-more.active { color: var(--accent); }
+  #more-panel {
+    position: fixed;
+    right: 92px;
+    bottom: calc(var(--bar-h) + 18px);
+    z-index: 70;
+    width: 210px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    background: rgba(8,5,14,0.94);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.56);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  #more-panel.hidden { display: none; }
+  .more-label { color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .more-actions { display: flex; align-items: center; gap: 5px; margin-top: 8px; }
+  .more-actions .ctrl-btn { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.05); }
+  .more-actions .ctrl-btn:hover, .more-actions .ctrl-btn.active { background: var(--accent-glow); color: var(--accent2); }
+  #more-panel .theme-dots { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07); gap: 7px; }
+  #more-panel .theme-dot { width: 13px; height: 13px; }
+
+  @media (max-width: 760px) {
+    #left-panel, #right-panel { width: auto; }
+    #btn-browse { left: 12px; top: 38px; }
+    #more-panel { right: 12px; bottom: calc(var(--bar-h) + 18px); }
+  }
+
   /* === TITLE BAR DRAG STRIP (hiddenInset window needs an explicit drag region) === */
   #titlebar-drag {
     position: fixed;
@@ -1306,6 +1405,11 @@
 <canvas id="liquid-canvas"></canvas>
 <div id="bg-gradient"></div>
 
+<button id="btn-browse" type="button" aria-label="打开音乐浏览" aria-expanded="false">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><line x1="16" y1="16" x2="21" y2="21"/></svg>
+  浏览
+</button>
+
 <!-- LEFT PANEL -->
 <div class="panel" id="left-panel">
   <div id="search-wrap">
@@ -1316,6 +1420,7 @@
       <input type="text" id="search-input" placeholder="搜索歌曲、歌手..." autocomplete="off" spellcheck="false">
     </div>
     <button id="login-btn" title="登录网易云账号可解锁更多歌曲">登录</button>
+    <button id="browse-close" type="button" aria-label="关闭音乐浏览" title="关闭">×</button>
   </div>
   <div id="panel-tabs">
     <button class="panel-tab active" id="tab-search">搜索结果</button>
@@ -1336,6 +1441,7 @@
 <!-- RIGHT PANEL -->
 <div class="panel" id="right-panel">
   <div id="right-orbit-card">
+    <button id="now-playing-close" type="button" aria-label="关闭正在播放" title="关闭">×</button>
     <div id="right-art-wrap">
       <img id="right-album-art" src="" alt="" style="display:none">
       <div id="right-art-placeholder">
@@ -1370,7 +1476,7 @@
 <!-- BOTTOM BAR -->
 <div class="panel" id="bottom-bar">
   <!-- Song info -->
-  <div class="bar-song-info">
+  <button class="bar-song-info" id="btn-now-playing" type="button" aria-label="打开正在播放和歌词" aria-expanded="false">
     <div id="bar-art-wrap" style="width:52px;height:52px;border-radius:10px;background:rgba(255,255,255,0.07);flex-shrink:0;position:relative;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
       <img id="bar-art" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;position:absolute;inset:0;">
       <div id="bar-art-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
@@ -1381,7 +1487,7 @@
       <div id="bar-title">未播放</div>
       <div id="bar-artist">—</div>
     </div>
-  </div>
+  </button>
 
   <!-- Center: controls + progress -->
   <div class="bar-center">
@@ -1416,27 +1522,10 @@
     </div>
   </div>
 
-  <!-- Right: theme + volume + like -->
+  <!-- Right: queue, volume, favourite and compact player options -->
   <div class="bar-right">
-    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时" aria-label="睡眠定时">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-      <span id="sleep-indicator"></span>
-    </button>
-    <div class="theme-dots">
-      <div class="theme-dot" data-theme="orange"  style="background:#ff5012" title="橙焰"></div>
-      <div class="theme-dot" data-theme="crimson" style="background:#ff1a3f" title="绯红"></div>
-      <div class="theme-dot" data-theme="rose"    style="background:#ff2080" title="玫瑰"></div>
-      <div class="theme-dot active" data-theme="violet"  style="background:#7A2CFF" title="紫罗兰"></div>
-      <div class="theme-dot" data-theme="blue"    style="background:#1870ff" title="钴蓝"></div>
-      <div class="theme-dot" data-theme="teal"    style="background:#00c8a0" title="青碧"></div>
-      <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
-      <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
-    </div>
-    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器" aria-label="节奏调节器">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/></svg>
-    </button>
-    <button class="ctrl-btn" id="btn-visual" title="视觉模式" aria-label="视觉模式">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
+    <button class="ctrl-btn" id="btn-more" type="button" title="更多播放选项" aria-label="更多播放选项" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
     </button>
     <button class="ctrl-btn" id="btn-queue" title="播放队列" aria-label="播放队列">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -1449,6 +1538,33 @@
       <svg id="icon-heart" width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
       <svg id="icon-heart-filled" width="15" height="14" viewBox="0 0 15 14" fill="currentColor" style="display:none"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
     </button>
+  </div>
+</div>
+
+<!-- COMPACT PLAYER OPTIONS -->
+<div id="more-panel" class="hidden" role="dialog" aria-label="更多播放选项">
+  <div class="more-label">外观与节奏</div>
+  <div class="more-actions">
+    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时" aria-label="睡眠定时">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <span id="sleep-indicator"></span>
+    </button>
+    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器" aria-label="节奏调节器">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <button class="ctrl-btn" id="btn-visual" title="视觉模式" aria-label="视觉模式">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
+    </button>
+  </div>
+  <div class="theme-dots" aria-label="主题颜色">
+    <div class="theme-dot" data-theme="orange"  style="background:#ff5012" title="橙焰"></div>
+    <div class="theme-dot" data-theme="crimson" style="background:#ff1a3f" title="绯红"></div>
+    <div class="theme-dot" data-theme="rose"    style="background:#ff2080" title="玫瑰"></div>
+    <div class="theme-dot active" data-theme="violet"  style="background:#7A2CFF" title="紫罗兰"></div>
+    <div class="theme-dot" data-theme="blue"    style="background:#1870ff" title="钴蓝"></div>
+    <div class="theme-dot" data-theme="teal"    style="background:#00c8a0" title="青碧"></div>
+    <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
+    <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
   </div>
 </div>
 
@@ -4212,6 +4328,7 @@ function applyVisualMode(mode, silent = false) {
 
 document.getElementById('btn-visual')?.addEventListener('click', (e) => {
   e.stopPropagation();
+  setMoreOpen(false);
   document.getElementById('visual-panel')?.classList.toggle('hidden');
 });
 
@@ -4260,6 +4377,7 @@ document.getElementById('tuner-reset').addEventListener('click', () => {
 
 document.getElementById('btn-tuner').addEventListener('click', (e) => {
   e.stopPropagation();
+  setMoreOpen(false);
   const panel = document.getElementById('tuner-panel');
   panel.classList.toggle('hidden');
   document.getElementById('btn-tuner').classList.toggle('active', !panel.classList.contains('hidden'));
@@ -4474,6 +4592,67 @@ _progressWrap.addEventListener('mouseleave', () => {
   _progressTooltip.classList.add('hidden');
 });
 
+// ===================================================================
+// CINEMATIC FOCUS DRAWERS
+// ===================================================================
+let _browseOpen = false;
+let _nowPlayingOpen = false;
+let _browseTrigger = null;
+let _nowPlayingTrigger = null;
+
+function setBrowseOpen(open, focusSearch = false, trigger = null) {
+  const button = document.getElementById('btn-browse');
+  const input = document.getElementById('search-input');
+  const wasOpen = _browseOpen;
+  if (open && !wasOpen) {
+    _browseTrigger = trigger || (document.activeElement instanceof HTMLElement && document.activeElement !== document.body && document.activeElement !== input ? document.activeElement : button);
+    setNowPlayingOpen(false);
+  }
+  _browseOpen = open;
+  document.body.classList.toggle('browse-open', open);
+  button.classList.toggle('active', open);
+  button.setAttribute('aria-expanded', String(open));
+  if (open && focusSearch) requestAnimationFrame(() => { if (_browseOpen) input.focus(); });
+  if (!open && wasOpen && _browseTrigger instanceof HTMLElement) _browseTrigger.focus();
+}
+
+function setNowPlayingOpen(open, trigger = null) {
+  const button = document.getElementById('btn-now-playing');
+  const wasOpen = _nowPlayingOpen;
+  if (open && !wasOpen) {
+    _nowPlayingTrigger = trigger || (document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : button);
+    setBrowseOpen(false);
+  }
+  _nowPlayingOpen = open;
+  document.body.classList.toggle('now-playing-open', open);
+  button.setAttribute('aria-expanded', String(open));
+  if (open) requestAnimationFrame(() => document.getElementById('now-playing-close').focus());
+  if (!open && wasOpen && _nowPlayingTrigger instanceof HTMLElement) _nowPlayingTrigger.focus();
+}
+
+function setMoreOpen(open) {
+  const panel = document.getElementById('more-panel');
+  const button = document.getElementById('btn-more');
+  panel.classList.toggle('hidden', !open);
+  button.classList.toggle('active', open);
+  button.setAttribute('aria-expanded', String(open));
+}
+
+document.getElementById('btn-browse').addEventListener('click', (e) => setBrowseOpen(!_browseOpen, true, e.currentTarget));
+document.getElementById('browse-close').addEventListener('click', () => setBrowseOpen(false));
+document.getElementById('btn-now-playing').addEventListener('click', (e) => setNowPlayingOpen(!_nowPlayingOpen, e.currentTarget));
+document.getElementById('now-playing-close').addEventListener('click', () => setNowPlayingOpen(false));
+document.getElementById('search-input').addEventListener('focus', () => setBrowseOpen(true, false, document.getElementById('btn-browse')));
+document.getElementById('btn-more').addEventListener('click', (e) => {
+  e.stopPropagation();
+  setMoreOpen(document.getElementById('more-panel').classList.contains('hidden'));
+});
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('more-panel');
+  const button = document.getElementById('btn-more');
+  if (!panel.classList.contains('hidden') && !panel.contains(e.target) && !button.contains(e.target)) setMoreOpen(false);
+});
+
 // Keyboard shortcuts: Space=play/pause, ←→=seek ±5s, ↑↓=volume ±5%, M=静音, L=喜欢, Cmd/Ctrl+F=搜索
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
@@ -4619,10 +4798,17 @@ document.getElementById('queue-close').addEventListener('click', () => toggleQue
 document.getElementById('queue-clear').addEventListener('click', clearQueue);
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (_queueOpen) { toggleQueue(false); return; }
-  document.getElementById('tuner-panel')?.classList.add('hidden');
-  document.getElementById('visual-panel')?.classList.add('hidden');
-  document.getElementById('btn-tuner')?.classList.remove('active');
+  if (_queueOpen) { toggleQueue(false); document.getElementById('btn-queue').focus(); return; }
+  if (!document.getElementById('more-panel').classList.contains('hidden')) { setMoreOpen(false); document.getElementById('btn-more').focus(); return; }
+  if (!document.getElementById('tuner-panel').classList.contains('hidden')) {
+    document.getElementById('tuner-panel').classList.add('hidden');
+    document.getElementById('btn-tuner').classList.remove('active');
+    document.getElementById('btn-more').focus();
+    return;
+  }
+  if (!document.getElementById('visual-panel').classList.contains('hidden')) { document.getElementById('visual-panel').classList.add('hidden'); document.getElementById('btn-more').focus(); return; }
+  if (_browseOpen) { setBrowseOpen(false); return; }
+  if (_nowPlayingOpen) { setNowPlayingOpen(false); return; }
   const qrModal = document.getElementById('qr-modal');
   if (qrModal && !qrModal.classList.contains('hidden')) {
     clearInterval(qrPollTimer);
