@@ -88,6 +88,23 @@ async function checks(audioUrl) {
     toggleQueue(true); click('#queue-list [data-idx="0"]'); await selected(31);
     assert(ids() === '31,32', 'Queue click replaced queue');
   });
+  await test('queue actions and favorites browse stay local', async () => {
+    await playIndex(0, songs([111, 112, 113]));
+    renderPlaylist(songs([114]));
+    document.querySelector('#playlist-wrap [data-song-id="114"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    document.querySelector('#ctx-menu [data-act="playnext"]').click();
+    assert(ids() === '111,114,112,113', 'Context menu did not enqueue next');
+    toggleQueue(true);
+    const second = document.querySelector('#queue-list [data-idx="2"] .q-remove');
+    second.click();
+    assert(ids() === '111,114,113', 'Queue remove changed the wrong item');
+    document.getElementById('queue-clear').click();
+    assert(ids() === '111' && state.currentIndex === 0, 'Queue clear did not preserve current song');
+    toggleQueue(false);
+    favMap = { 111: { ...song(111), ar: [{ name: 'Artist' }], al: {}, at: Date.now() } };
+    document.getElementById('tab-favorites').click();
+    assert(document.querySelector('#playlist-wrap [data-song-id="111"]'), 'Favorites browse did not render');
+  });
   await test('stale searches, edited queries, and cleared input cannot repaint', async () => {
     const old = deferred(); routes.set('search:old', () => old.promise);
     const pending = performSearch('old'); await performSearch('browse');

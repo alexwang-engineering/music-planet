@@ -4,7 +4,8 @@
 [![CI](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml/badge.svg)](https://github.com/alexwang-engineering/music-planet/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-> 🚧 **Work in progress** — under active development, not feature-complete. Feedback and review welcome via the open draft PR.
+> 🚧 **Work in progress** — under active development, not feature-complete.
+> Feedback and review are welcome via GitHub issues.
 
 A personal-use Electron desktop app that wraps NetEase Cloud Music (网易云音乐)
 in a custom Three.js/WebGL player interface and packages as a macOS application.
@@ -102,7 +103,8 @@ is pinned to `4.32.0` and staged at build time rather than listed as a runtime
 dependency, so the bundled API is reproducible and does not shift when upstream
 publishes a breaking change. The `predist` step also forces a
 `music-metadata@11.14.0` override to resolve a transitive version conflict during
-that staging install.
+that staging install. The root dependency tree forces `brace-expansion@5.0.8`
+to retain the patched release required by the security audit.
 
 ## License
 

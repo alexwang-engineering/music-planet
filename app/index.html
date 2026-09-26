@@ -222,6 +222,47 @@
   .body-playing .song-item.active .eq-icon { display:flex; }
   .body-playing .song-item.active .song-dur { display:none; }
 
+  /* Keyboard focus ring for song rows (a11y) */
+  .song-item:focus-visible {
+    outline: none;
+    background: rgba(255,255,255,0.09);
+    box-shadow: inset 0 0 0 1.5px var(--accent-glow, rgba(122,44,255,0.55));
+  }
+
+  /* Songs that can't be played without VIP — dimmed, still clickable in case
+     the logged-in account has access. */
+  .song-item.unplayable { opacity: 0.42; }
+  .song-item.unplayable:hover { opacity: 0.6; }
+
+  /* Right-click context menu for song rows */
+  #ctx-menu {
+    position: fixed;
+    z-index: 200;
+    min-width: 148px;
+    padding: 5px;
+    border-radius: 11px;
+    background: rgba(20,18,32,0.86);
+    backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    animation: ctxIn 0.12s ease-out;
+  }
+  @keyframes ctxIn { from { opacity:0; transform: scale(0.96) translateY(-3px); } to { opacity:1; transform:none; } }
+  #ctx-menu.hidden { display:none; }
+  .ctx-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.82);
+    border-radius: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ctx-item:hover { background: var(--accent); color: #fff; }
+  .ctx-item svg { flex-shrink:0; opacity:0.85; }
+  .ctx-sep { height:1px; margin:4px 6px; background:rgba(255,255,255,0.08); }
+
   .song-thumb {
     width: 38px;
     height: 38px;
@@ -917,8 +958,11 @@
     flex-shrink: 0;
   }
   .queue-header span { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.80); letter-spacing: 0.06em; text-transform: uppercase; }
-  #queue-close { background: none; border: none; color: rgba(255,255,255,0.30); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color 0.15s; }
-  #queue-close:hover { color: rgba(255,255,255,0.80); }
+  .queue-actions { display:flex; align-items:center; gap:8px; }
+  #queue-clear, #queue-close { background: none; border: none; color: rgba(255,255,255,0.30); cursor: pointer; line-height: 1; padding: 2px 4px; transition: color 0.15s; }
+  #queue-clear { font-size: 10px; }
+  #queue-close { font-size: 20px; }
+  #queue-clear:hover, #queue-close:hover { color: rgba(255,255,255,0.80); }
   #queue-list { overflow-y: auto; flex: 1; padding: 4px 0; }
   #queue-list::-webkit-scrollbar { width: 3px; }
   #queue-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
@@ -934,6 +978,10 @@
   .queue-item.current .q-name { color: var(--accent2); font-weight: 500; }
   .queue-item .q-artist { font-size: 11px; color: rgba(255,255,255,0.26); white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
   .queue-item .q-dur { font-size: 11px; color: rgba(255,255,255,0.18); flex-shrink: 0; width: 34px; text-align: right; }
+  .queue-item .q-remove { border:0; background:none; color:rgba(255,255,255,0.28); cursor:pointer; font-size:14px; line-height:1; padding:2px 0 2px 4px; }
+  .queue-item .q-remove:hover { color:#ff6b86; }
+  .queue-item .q-remove:disabled { opacity:.25; cursor:default; }
+  .inline-action { margin-top:10px; border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.06); color:var(--accent2); border-radius:6px; padding:5px 10px; cursor:pointer; }
 
   /* === LOADING SPINNER === */
   .spinner {
@@ -1269,9 +1317,10 @@
     </div>
     <button id="login-btn" title="登录网易云账号可解锁更多歌曲">登录</button>
   </div>
-  <div id="panel-tabs" class="hidden">
+  <div id="panel-tabs">
     <button class="panel-tab active" id="tab-search">搜索结果</button>
     <button class="panel-tab" id="tab-mylist">我的歌单</button>
+    <button class="panel-tab" id="tab-favorites">喜欢</button>
   </div>
   <div id="playlist-wrap">
     <div id="empty-state">
@@ -1337,20 +1386,20 @@
   <!-- Center: controls + progress -->
   <div class="bar-center">
     <div class="controls">
-      <button class="ctrl-btn" id="btn-shuffle" title="随机播放">
+      <button class="ctrl-btn" id="btn-shuffle" title="随机播放" aria-label="随机播放">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-prev" title="上一首">
+      <button class="ctrl-btn" id="btn-prev" title="上一首" aria-label="上一首">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h2v10H2zm2 5L12 2v10L4 7z"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-play-pause" title="播放/暂停">
+      <button class="ctrl-btn" id="btn-play-pause" title="播放/暂停" aria-label="播放或暂停">
         <svg id="icon-play" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
         <svg id="icon-pause" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display:none"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-next" title="下一首">
+      <button class="ctrl-btn" id="btn-next" title="下一首" aria-label="下一首">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M12 2h-2v10h2zm-2 5L2 2v10l8-5z"/></svg>
       </button>
-      <button class="ctrl-btn" id="btn-repeat" title="循环模式">
+      <button class="ctrl-btn" id="btn-repeat" title="循环模式" aria-label="循环模式">
         <svg id="icon-repeat-all" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
         <svg id="icon-repeat-one" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/><line x1="11" y1="9" x2="11" y2="15"/></svg>
       </button>
@@ -1369,7 +1418,7 @@
 
   <!-- Right: theme + volume + like -->
   <div class="bar-right">
-    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时">
+    <button class="ctrl-btn" id="btn-sleep" title="睡眠定时" aria-label="睡眠定时">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
       <span id="sleep-indicator"></span>
     </button>
@@ -1383,20 +1432,20 @@
       <div class="theme-dot" data-theme="green"   style="background:#00c855" title="翡翠"></div>
       <div class="theme-dot" data-theme="mix"    title="彩虹流光"></div>
     </div>
-    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器">
+    <button class="ctrl-btn" id="btn-tuner" title="节奏调节器" aria-label="节奏调节器">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="7" cy="18" r="2.2" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button class="ctrl-btn" id="btn-visual" title="视觉模式">
+    <button class="ctrl-btn" id="btn-visual" title="视觉模式" aria-label="视觉模式">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-5.2 5.2-5.2 8 0s5.5 5.2 8 0"/><path d="M4 10c2.5 5.2 5.2 5.2 8 0s5.5-5.2 8 0"/></svg>
     </button>
-    <button class="ctrl-btn" id="btn-queue" title="播放队列">
+    <button class="ctrl-btn" id="btn-queue" title="播放队列" aria-label="播放队列">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     </button>
     <div class="volume-wrap">
       <svg class="vol-icon" width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 5h2.5L8 2v10L4.5 9H2V5zm9-2.5a6 6 0 010 9M8.5 5a3 3 0 010 4"/></svg>
       <input type="range" id="volume-slider" min="0" max="100" value="80">
     </div>
-    <button class="ctrl-btn" id="btn-like" title="喜欢">
+    <button class="ctrl-btn" id="btn-like" title="喜欢" aria-label="喜欢当前歌曲">
       <svg id="icon-heart" width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
       <svg id="icon-heart-filled" width="15" height="14" viewBox="0 0 15 14" fill="currentColor" style="display:none"><path d="M7.5 12S1 8 1 4a3.5 3.5 0 017 0 3.5 3.5 0 017 0c0 4-6.5 8-7.5 8z"/></svg>
     </button>
@@ -1431,12 +1480,27 @@
 <div id="queue-panel" class="hidden">
   <div class="queue-header">
     <span>播放队列</span>
-    <button id="queue-close">×</button>
+    <div class="queue-actions">
+      <button id="queue-clear" title="清空后续歌曲">清空</button>
+      <button id="queue-close" title="关闭播放队列">×</button>
+    </div>
   </div>
   <div id="queue-list"></div>
 </div>
 
 <div id="toast"></div>
+
+<!-- Right-click menu for song rows -->
+<div id="ctx-menu" class="hidden">
+  <div class="ctx-item" data-act="playnext">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+    下一首播放
+  </div>
+  <div class="ctx-item" data-act="addqueue">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    加入队列
+  </div>
+</div>
 
 <!-- QR LOGIN MODAL -->
 <div id="qr-modal" class="hidden">
@@ -2708,6 +2772,7 @@ let _ringPhase = 0;
 // user's taste survives restarts. 1 = the shipped default feel.
 const VIZ_DEFAULTS = {
   beat:      1,    // 打击强度 — flash/pulse/shake per hit
+  beatDecay: 7.5,  // 回弹速度 — whole-ball hit release
   ring:      1,    // 震颤幅度 — radius oscillation amplitude
   ringFreq:  11,   // 震颤频率 Hz
   ringDecay: 5.5,  // 震颤衰减 /s (bigger = stops sooner)
@@ -2981,8 +3046,9 @@ function animate() {
   time += delta;
 
   updateAudio(delta);
-  beatFlash *= Math.exp(-delta / 0.13);
-  spherePulse *= Math.exp(-delta / 0.15);
+  const beatRelease = Math.max(0.07, 1 / Math.max(VIZ.beatDecay, 1));
+  beatFlash *= Math.exp(-delta / beatRelease);
+  spherePulse *= Math.exp(-delta / (beatRelease * 1.12));
 
   // ── Beat onset detection: bass-band spectral flux + adaptive threshold ──
   // Standard visualizer technique (flux = positive spectral change = attack
@@ -3584,7 +3650,7 @@ function renderLyrics(lyrics, transMap = new Map()) {
 // ===================================================================
 // PLAYLIST RENDER
 // ===================================================================
-function renderPlaylist(songs) {
+function renderPlaylist(songs, labelText = '搜索结果') {
   const wrap = document.getElementById('playlist-wrap');
   if (!songs.length) {
     wrap.innerHTML = '<div id="status-msg">没有找到结果</div>';
@@ -3595,7 +3661,7 @@ function renderPlaylist(songs) {
   // Section label
   const label = document.createElement('div');
   label.className = 'section-label';
-  label.textContent = '搜索结果';
+  label.textContent = labelText;
   wrap.appendChild(label);
 
   songs.forEach((song, i) => {
@@ -3624,7 +3690,10 @@ function renderPlaylist(songs) {
     }
 
     const fee = song.fee ?? 0;
-    const vipBadge = (fee > 0 && !sessionCookie) ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    const unplayable = fee > 0 && !sessionCookie;
+    const vipBadge = unplayable ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    if (unplayable) div.classList.add('unplayable');
+    div.dataset.songId = song.id;
     div.innerHTML = `
       ${thumbHtml}
       <div class="song-info">
@@ -3634,7 +3703,7 @@ function renderPlaylist(songs) {
       <div class="eq-icon"><span></span><span></span><span></span></div>
       ${dur ? `<div class="song-dur">${dur}</div>` : ''}
     `;
-    div.addEventListener('click', () => playIndex(i, songs));
+    bindSongItem(div, song, () => playFromBrowse(songs, i));
     wrap.appendChild(div);
   });
   updatePlaylistActive();
@@ -3646,6 +3715,101 @@ function updatePlaylistActive() {
     el.classList.toggle('active', songId != null && el.dataset.songId === String(songId));
   });
 }
+
+// ===================================================================
+// BROWSE LIST vs PLAY QUEUE
+// ---------------------------------------------------------------
+// A browse view (search results, a playlist's tracks, recommendations…)
+// is a read-only *source*. The real play queue is `state.playlist`.
+// Browsing NEVER mutates the queue — only an explicit play / enqueue
+// action does. That's what keeps a search from blowing away the queue
+// you're listening to. Each song row captures its own source array, so
+// clicking is always correct even when several views coexist in the DOM.
+// ===================================================================
+
+// Play a song from a browse view: the whole view becomes the new queue,
+// then we start at the clicked index (matches how clicking a track in any
+// player plays through that list).
+function playFromBrowse(songsArray, idx) {
+  state.playlist = songsArray.slice();
+  state.currentIndex = -1;
+  playIndex(idx);
+}
+
+// Insert a single song right after the currently-playing one, without
+// disturbing playback. If the queue is empty, it just starts playing.
+function enqueueNext(song) {
+  if (!state.playlist.length || state.currentIndex < 0) {
+    state.playlist = [song];
+    state.currentIndex = -1;
+    playIndex(0);
+    return;
+  }
+  state.playlist.splice(state.currentIndex + 1, 0, song);
+  saveResume();
+  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
+  showToast(`已设为下一首：${song.name || ''}`);
+}
+
+// Append a song to the end of the queue (or start playing if empty).
+function enqueueEnd(song) {
+  if (!state.playlist.length || state.currentIndex < 0) {
+    state.playlist = [song];
+    state.currentIndex = -1;
+    playIndex(0);
+    return;
+  }
+  state.playlist.push(song);
+  saveResume();
+  if (!document.getElementById('queue-panel').classList.contains('hidden')) renderQueue();
+  showToast(`已加入队列：${song.name || ''}`);
+}
+
+// Wire click + keyboard (Enter/Space) + right-click menu onto a song row.
+// `song` is the song object; `onPlay` runs on activation.
+function bindSongItem(el, song, onPlay) {
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.addEventListener('click', onPlay);
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopPropagation();   // don't let Space also hit the global play/pause shortcut
+      onPlay();
+    }
+  });
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, song);
+  });
+}
+
+// ---- Right-click context menu ----
+let _ctxSong = null;
+function showContextMenu(x, y, song) {
+  _ctxSong = song;
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.remove('hidden');
+  // Clamp to viewport so it never opens off-screen.
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+}
+function hideContextMenu() {
+  document.getElementById('ctx-menu').classList.add('hidden');
+  _ctxSong = null;
+}
+document.getElementById('ctx-menu').addEventListener('click', (e) => {
+  const item = e.target.closest('.ctx-item');
+  if (!item || !_ctxSong) return;
+  const song = _ctxSong;
+  if (item.dataset.act === 'playnext') enqueueNext(song);
+  else if (item.dataset.act === 'addqueue') enqueueEnd(song);
+  hideContextMenu();
+});
+window.addEventListener('click', () => hideContextMenu());
+window.addEventListener('blur', () => hideContextMenu());
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); });
 
 // ===================================================================
 // PLAY SONG
@@ -4055,6 +4219,7 @@ document.getElementById('btn-visual')?.addEventListener('click', (e) => {
 
 // ── 节奏调节器 panel ─────────────────────────────────────────────
 const TUNER_ROWS = [
+  { key: 'beatDecay', label: '回弹速度', min: 3,   max: 14, step: 0.5, fmt: v => v.toFixed(1) },
   { key: 'beat',      label: '打击强度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
   { key: 'ring',      label: '震颤幅度', min: 0,   max: 2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
   { key: 'ringFreq',  label: '震颤频率', min: 6,   max: 18, step: 1,    fmt: v => v + 'Hz' },
@@ -4405,18 +4570,44 @@ function renderQueue() {
     const artist = (s.artists || s.ar || []).map(a => a.name).join(' / ') || '未知歌手';
     const dur = formatTime((s.dt || 0) / 1000);
     const isCurrent = i === state.currentIndex;
-    return `<div class="queue-item${isCurrent ? ' current' : ''}" data-idx="${i}">
+    return `<div class="queue-item${isCurrent ? ' current' : ''}" data-idx="${i}" role="button" tabindex="0">
       <span class="q-num">${isCurrent ? '▶' : i + 1}</span>
       <span class="q-name">${escHtml(name)}</span>
       <span class="q-artist">${escHtml(artist)}</span>
       <span class="q-dur">${dur}</span>
+      <button class="q-remove" data-remove-idx="${i}" aria-label="移除 ${escHtml(name)}" title="移除"${isCurrent ? ' disabled' : ''}>×</button>
     </div>`;
   }).join('');
   list.querySelectorAll('.queue-item').forEach(el => {
-    el.addEventListener('click', () => { playIndex(parseInt(el.dataset.idx)); toggleQueue(false); });
+    const play = () => { playIndex(parseInt(el.dataset.idx)); toggleQueue(false); };
+    el.addEventListener('click', (e) => { if (!e.target.closest('.q-remove')) play(); });
+    el.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.code === 'Space') && !e.target.closest('.q-remove')) { e.preventDefault(); play(); } });
   });
+  list.querySelectorAll('.q-remove').forEach(btn => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    removeFromQueue(parseInt(btn.dataset.removeIdx));
+  }));
   const cur = list.querySelector('.queue-item.current');
   if (cur) setTimeout(() => cur.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+}
+
+function removeFromQueue(idx) {
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.playlist.length) return;
+  if (idx === state.currentIndex) { showToast('当前歌曲不能移除'); return; }
+  state.playlist.splice(idx, 1);
+  if (idx < state.currentIndex) state.currentIndex--;
+  saveResume();
+  renderQueue();
+}
+
+function clearQueue() {
+  if (!state.playlist.length) return;
+  const current = currentSong();
+  state.playlist = current ? [current] : [];
+  state.currentIndex = current ? 0 : -1;
+  saveResume();
+  renderQueue();
+  showToast('已清空后续歌曲');
 }
 
 function toggleQueue(show) {
@@ -4427,9 +4618,12 @@ function toggleQueue(show) {
 
 document.getElementById('btn-queue').addEventListener('click', () => toggleQueue());
 document.getElementById('queue-close').addEventListener('click', () => toggleQueue(false));
+document.getElementById('queue-clear').addEventListener('click', clearQueue);
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (_queueOpen) { toggleQueue(false); return; }
+  document.getElementById('tuner-panel')?.classList.add('hidden');
+  document.getElementById('visual-panel')?.classList.add('hidden');
   const qrModal = document.getElementById('qr-modal');
   if (qrModal && !qrModal.classList.contains('hidden')) {
     clearInterval(qrPollTimer);
@@ -4504,9 +4698,33 @@ function toggleLike() {
   if (sessionCookie) {
     api(`/like?id=${song.id}&like=${liked}&timestamp=${Date.now()}`).catch(() => {});
   }
+  if (document.getElementById('tab-favorites')?.classList.contains('active')) renderFavorites();
 }
 
 document.getElementById('btn-like').addEventListener('click', toggleLike);
+
+function renderFavorites() {
+  const wrap = document.getElementById('playlist-wrap');
+  const songs = Object.values(favMap).sort((a, b) => (b.at || 0) - (a.at || 0));
+  if (!songs.length) {
+    wrap.innerHTML = '<div id="empty-state"><span>还没有喜欢的歌曲</span></div>';
+    return;
+  }
+  wrap.innerHTML = '<div class="history-header">我的喜欢</div>';
+  songs.forEach((song, i) => {
+    const div = document.createElement('div');
+    div.className = 'song-item';
+    div.dataset.songId = song.id;
+    const artist = (song.ar || song.artists || []).map(a => a.name).join(' / ') || '未知歌手';
+    const pic = song.al?.picUrl || '';
+    div.innerHTML = `${pic ? `<img class="song-thumb" src="${escHtml(pic)}?param=80y80" alt="" loading="lazy">` : '<div class="song-thumb-placeholder">♪</div>'}
+      <div class="song-info"><div class="song-name">${escHtml(song.name || '未知')}</div><div class="song-artist">${escHtml(artist)}</div></div>
+      <div class="eq-icon"><span></span><span></span><span></span></div>`;
+    bindSongItem(div, song, () => playFromBrowse(songs, i));
+    wrap.appendChild(div);
+  });
+  updatePlaylistActive();
+}
 
 // ===================================================================
 // SEARCH
@@ -4517,6 +4735,11 @@ let searchRequestId = 0;
 document.getElementById('search-input').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   ++searchRequestId;
+  document.getElementById('tab-search').classList.add('active');
+  document.getElementById('tab-mylist').classList.remove('active');
+  document.getElementById('tab-favorites').classList.remove('active');
+  document.getElementById('playlist-wrap').style.display = 'block';
+  document.getElementById('mylist-wrap').style.display = 'none';
   const q = e.target.value.trim();
   if (!q) {
     // Show history in the browse list but leave the play queue untouched.
@@ -4540,6 +4763,9 @@ async function performSearch(q) {
   wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
 
   try {
+    // Searching only updates the browse list (via renderPlaylist) — it does
+    // NOT touch the play queue. The queue only changes when you actually
+    // play or enqueue a song.
     const songs = await searchSongs(q);
     if (requestId !== searchRequestId) return;
     renderPlaylist(songs);
@@ -4550,12 +4776,12 @@ async function performSearch(q) {
     if (requestId !== searchRequestId) return;
     console.error(err);
     if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
-      wrap.innerHTML = `<div id="status-msg">
-        请先启动 NetEase Cloud Music API 服务<br>
-        <span style="font-size:12px;color:var(--text-muted)">端口 3000 · <a href="https://github.com/Binaryify/NeteaseCloudMusicApi" target="_blank">安装说明</a></span>
-      </div>`;
+      // The API is bundled and auto-started by the app, so this means it
+      // hasn't finished coming up (or crashed) — a wait/retry, not a
+      // "please install" situation.
+      showRetry(wrap, '音乐服务正在启动，请稍候重试…', () => performSearch(q));
     } else {
-      wrap.innerHTML = `<div id="status-msg">搜索失败: ${escHtml(err.message)}</div>`;
+      showRetry(wrap, `搜索失败: ${escHtml(err.message)}`, () => performSearch(q));
     }
   }
 }
@@ -4583,6 +4809,11 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+function showRetry(wrap, message, retry) {
+  wrap.innerHTML = `<div id="status-msg">${message}<br><button class="inline-action" type="button">重试</button></div>`;
+  wrap.querySelector('.inline-action')?.addEventListener('click', retry);
+}
+
 // ===================================================================
 // PLAY HISTORY
 // ===================================================================
@@ -4604,11 +4835,10 @@ function addToHistory(song) {
 function renderHistory() {
   const songs = playHistory.slice();
   const wrap = document.getElementById('playlist-wrap');
-  if (!songs.length) {
-    wrap.innerHTML = `<div id="empty-state">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
-      <span>搜索你喜欢的音乐</span>
-    </div>`;
+  if (!playHistory.length) {
+    // Cold start: nothing played yet → surface recommendations so the very
+    // first open always has something to play instead of a blank panel.
+    renderRecommendations();
     return;
   }
   wrap.innerHTML = `<div class="history-header">最近播放</div>` +
@@ -4630,11 +4860,64 @@ function renderHistory() {
       </div>`;
     }).join('');
   wrap.querySelectorAll('.song-item[data-hist-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      // Queue becomes the whole history list so next/prev keep working.
-      const idx = parseInt(el.dataset.histIdx);
-      playIndex(idx, songs);
-    });
+    // Playing from history makes the whole history list the queue.
+    const idx = parseInt(el.dataset.histIdx);
+    bindSongItem(el, playHistory[idx], () => playFromBrowse(playHistory, idx));
+  });
+}
+
+// ===================================================================
+// COLD-START RECOMMENDATIONS
+// First open (no history) shows the top-songs chart so there's always
+// something to play. Cached for the session.
+// ===================================================================
+let _recCache = null;
+async function renderRecommendations() {
+  const wrap = document.getElementById('playlist-wrap');
+  if (_recCache) { _renderRecList(_recCache); return; }
+  wrap.innerHTML = `<div id="empty-state"><div class="spinner"></div></div>`;
+  try {
+    const data = await api('/top/song?type=0');
+    const songs = (data.data || []).slice(0, 30);
+    if (!songs.length) throw new Error('empty');
+    _recCache = songs;
+    _renderRecList(songs);
+  } catch (e) {
+    showRetry(wrap, '推荐暂时不可用', renderRecommendations);
+  }
+}
+
+function _renderRecList(songs) {
+  const wrap = document.getElementById('playlist-wrap');
+  wrap.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'history-header';
+  label.textContent = '🔥 热门推荐';
+  wrap.appendChild(label);
+  songs.forEach((song, i) => {
+    const artistStr = (song.artists || song.ar || []).map(a => a.name).join(' / ') || '未知歌手';
+    const dur = song.duration ? formatTime(song.duration / 1000) : (song.dt ? formatTime(song.dt / 1000) : '');
+    const picUrl = song.al?.picUrl || song.album?.picUrl || '';
+    const fee = song.fee ?? 0;
+    const unplayable = fee > 0 && !sessionCookie;
+    const div = document.createElement('div');
+    div.className = 'song-item' + (unplayable ? ' unplayable' : '');
+    div.dataset.songId = song.id;
+    const thumbHtml = picUrl
+      ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
+      : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
+    const vipBadge = unplayable ? `<span class="vip-badge" title="需要VIP">🔒</span>` : '';
+    div.innerHTML = `
+      ${thumbHtml}
+      <div class="song-info">
+        <div class="song-name">${escHtml(song.name)}${vipBadge}</div>
+        <div class="song-artist">${escHtml(artistStr)}</div>
+      </div>
+      <div class="eq-icon"><span></span><span></span><span></span></div>
+      ${dur ? `<div class="song-dur">${dur}</div>` : ''}
+    `;
+    bindSongItem(div, song, () => playFromBrowse(songs, i));
+    wrap.appendChild(div);
   });
   updatePlaylistActive();
 }
@@ -4651,7 +4934,8 @@ let userUid = null;
 
 function markLoggedIn(uid) {
   const btn = document.getElementById('login-btn');
-  btn.textContent = '已登录';
+  btn.textContent = '退出登录';
+  btn.title = '退出网易云账号';
   btn.classList.add('logged-in');
   if (uid) userUid = uid;
   // Show panel tabs and load playlists
@@ -4662,6 +4946,21 @@ function markLoggedIn(uid) {
   refreshTimer = setInterval(async () => {
     try { await api(`/login/refresh?timestamp=${Date.now()}`); } catch (_) {}
   }, 30 * 60 * 1000);
+}
+
+function logout() {
+  clearInterval(refreshTimer);
+  clearInterval(qrPollTimer);
+  sessionCookie = '';
+  userUid = null;
+  userPlaylists = [];
+  localStorage.removeItem('netease_cookie');
+  const btn = document.getElementById('login-btn');
+  btn.textContent = '登录';
+  btn.title = '登录网易云账号可解锁更多歌曲';
+  btn.classList.remove('logged-in');
+  renderPlaylistList();
+  showToast('已退出登录');
 }
 
 // ===================================================================
@@ -4679,7 +4978,10 @@ async function loadUserPlaylists(uid) {
     userPlaylists = data.playlist || [];
     renderPlaylistList();
   } catch (e) {
-    if (requestId === playlistRequestId) userPlaylists = [];
+    if (requestId === playlistRequestId) {
+      userPlaylists = [];
+      showRetry(document.getElementById('mylist-wrap'), '歌单加载失败', () => loadUserPlaylists(uid));
+    }
   }
 }
 
@@ -4755,29 +5057,41 @@ async function loadPlaylistTracks(playlistId, playlistName) {
         <div class="eq-icon"><span></span><span></span><span></span></div>
         ${dur ? `<div class="song-dur">${dur}</div>` : ''}
       `;
-      div.addEventListener('click', () => playIndex(i, songs));
+      bindSongItem(div, song, () => playFromBrowse(songs, i));
       wrap.appendChild(div);
     });
     updatePlaylistActive();
   } catch (e) {
-    if (requestId === playlistRequestId) loading.textContent = '加载失败: ' + e.message;
+    if (requestId === playlistRequestId) showRetry(wrap, `加载失败: ${escHtml(e.message)}`, () => loadPlaylistTracks(playlistId, playlistName));
   }
 }
 
 document.getElementById('tab-search').addEventListener('click', () => {
   document.getElementById('tab-search').classList.add('active');
   document.getElementById('tab-mylist').classList.remove('active');
+  document.getElementById('tab-favorites').classList.remove('active');
   document.getElementById('playlist-wrap').style.display = 'block';
   document.getElementById('mylist-wrap').style.display = 'none';
 });
 
 document.getElementById('tab-mylist').addEventListener('click', () => {
+  if (!userUid) { showToast('请先登录查看歌单'); return; }
   document.getElementById('tab-mylist').classList.add('active');
   document.getElementById('tab-search').classList.remove('active');
+  document.getElementById('tab-favorites').classList.remove('active');
   document.getElementById('playlist-wrap').style.display = 'none';
   document.getElementById('mylist-wrap').style.display = 'block';
   // Always refetch so playlist changes made elsewhere (phone/web) show up immediately.
   if (userUid) loadUserPlaylists(userUid);
+});
+
+document.getElementById('tab-favorites').addEventListener('click', () => {
+  document.getElementById('tab-favorites').classList.add('active');
+  document.getElementById('tab-search').classList.remove('active');
+  document.getElementById('tab-mylist').classList.remove('active');
+  document.getElementById('playlist-wrap').style.display = 'block';
+  document.getElementById('mylist-wrap').style.display = 'none';
+  renderFavorites();
 });
 
 document.getElementById('back-to-playlists').addEventListener('click', () => {
@@ -4891,7 +5205,7 @@ function switchLoginTab(tab) {
   }
 }
 
-document.getElementById('login-btn').addEventListener('click', () => openLoginModal('qr'));
+document.getElementById('login-btn').addEventListener('click', () => sessionCookie ? logout() : openLoginModal('qr'));
 document.getElementById('tab-qr').addEventListener('click',    () => switchLoginTab('qr'));
 document.getElementById('tab-phone').addEventListener('click', () => switchLoginTab('phone'));
 document.getElementById('qr-close').addEventListener('click', () => {
