@@ -3731,9 +3731,7 @@ function updatePlaylistActive() {
 // then we start at the clicked index (matches how clicking a track in any
 // player plays through that list).
 function playFromBrowse(songsArray, idx) {
-  state.playlist = songsArray.slice();
-  state.currentIndex = -1;
-  playIndex(idx);
+  playIndex(idx, songsArray);
 }
 
 // Insert a single song right after the currently-playing one, without
@@ -4624,6 +4622,7 @@ window.addEventListener('keydown', (e) => {
   if (_queueOpen) { toggleQueue(false); return; }
   document.getElementById('tuner-panel')?.classList.add('hidden');
   document.getElementById('visual-panel')?.classList.add('hidden');
+  document.getElementById('btn-tuner')?.classList.remove('active');
   const qrModal = document.getElementById('qr-modal');
   if (qrModal && !qrModal.classList.contains('hidden')) {
     clearInterval(qrPollTimer);
@@ -4704,6 +4703,7 @@ function toggleLike() {
 document.getElementById('btn-like').addEventListener('click', toggleLike);
 
 function renderFavorites() {
+  ++browseRequestId;
   const wrap = document.getElementById('playlist-wrap');
   const songs = Object.values(favMap).sort((a, b) => (b.at || 0) - (a.at || 0));
   if (!songs.length) {
@@ -4731,10 +4731,12 @@ function renderFavorites() {
 // ===================================================================
 let searchTimer = null;
 let searchRequestId = 0;
+let browseRequestId = 0;
 
 document.getElementById('search-input').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
   ++searchRequestId;
+  ++browseRequestId;
   document.getElementById('tab-search').classList.add('active');
   document.getElementById('tab-mylist').classList.remove('active');
   document.getElementById('tab-favorites').classList.remove('active');
@@ -4759,6 +4761,7 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
 
 async function performSearch(q) {
   const requestId = ++searchRequestId;
+  const browseId = ++browseRequestId;
   const wrap = document.getElementById('playlist-wrap');
   wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
 
@@ -4767,13 +4770,13 @@ async function performSearch(q) {
     // NOT touch the play queue. The queue only changes when you actually
     // play or enqueue a song.
     const songs = await searchSongs(q);
-    if (requestId !== searchRequestId) return;
+    if (requestId !== searchRequestId || browseId !== browseRequestId) return;
     renderPlaylist(songs);
     if (!songs.length) {
       wrap.innerHTML = `<div id="empty-state"><span style="color:rgba(255,255,255,0.35);font-size:13px">没有找到 "${escHtml(q)}"</span></div>`;
     }
   } catch (err) {
-    if (requestId !== searchRequestId) return;
+    if (requestId !== searchRequestId || browseId !== browseRequestId) return;
     console.error(err);
     if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
       // The API is bundled and auto-started by the app, so this means it
@@ -4829,16 +4832,17 @@ function addToHistory(song) {
   });
   if (playHistory.length > MAX_HISTORY) playHistory.length = MAX_HISTORY;
   localStorage.setItem('mp_history', JSON.stringify(playHistory));
-  if (!document.getElementById('search-input').value.trim()) renderHistory();
+  if (document.getElementById('tab-search').classList.contains('active') && !document.getElementById('search-input').value.trim()) renderHistory();
 }
 
 function renderHistory() {
+  const browseId = ++browseRequestId;
   const songs = playHistory.slice();
   const wrap = document.getElementById('playlist-wrap');
   if (!playHistory.length) {
     // Cold start: nothing played yet → surface recommendations so the very
     // first open always has something to play instead of a blank panel.
-    renderRecommendations();
+    renderRecommendations(browseId);
     return;
   }
   wrap.innerHTML = `<div class="history-header">最近播放</div>` +
@@ -4872,18 +4876,21 @@ function renderHistory() {
 // something to play. Cached for the session.
 // ===================================================================
 let _recCache = null;
-async function renderRecommendations() {
+async function renderRecommendations(browseId = ++browseRequestId) {
   const wrap = document.getElementById('playlist-wrap');
-  if (_recCache) { _renderRecList(_recCache); return; }
+  if (_recCache) {
+    if (browseId === browseRequestId) _renderRecList(_recCache);
+    return;
+  }
   wrap.innerHTML = `<div id="empty-state"><div class="spinner"></div></div>`;
   try {
     const data = await api('/top/song?type=0');
     const songs = (data.data || []).slice(0, 30);
     if (!songs.length) throw new Error('empty');
     _recCache = songs;
-    _renderRecList(songs);
+    if (browseId === browseRequestId) _renderRecList(songs);
   } catch (e) {
-    showRetry(wrap, '推荐暂时不可用', renderRecommendations);
+    if (browseId === browseRequestId) showRetry(wrap, '推荐暂时不可用', renderRecommendations);
   }
 }
 
@@ -5072,10 +5079,14 @@ document.getElementById('tab-search').addEventListener('click', () => {
   document.getElementById('tab-favorites').classList.remove('active');
   document.getElementById('playlist-wrap').style.display = 'block';
   document.getElementById('mylist-wrap').style.display = 'none';
+  const q = document.getElementById('search-input').value.trim();
+  if (q) performSearch(q);
+  else renderHistory();
 });
 
 document.getElementById('tab-mylist').addEventListener('click', () => {
   if (!userUid) { showToast('请先登录查看歌单'); return; }
+  ++browseRequestId;
   document.getElementById('tab-mylist').classList.add('active');
   document.getElementById('tab-search').classList.remove('active');
   document.getElementById('tab-favorites').classList.remove('active');

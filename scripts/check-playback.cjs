@@ -88,6 +88,16 @@ async function checks(audioUrl) {
     toggleQueue(true); click('#queue-list [data-idx="0"]'); await selected(31);
     assert(ids() === '31,32', 'Queue click replaced queue');
   });
+  await test('new browse queue clears old shuffle history', async () => {
+    state.shuffle = true;
+    _shuffleHistory = [1, 2];
+    renderPlaylist(songs([201, 202, 203]));
+    click('#playlist-wrap [data-song-id="201"]'); await selected(201);
+    const next = getNextIndex();
+    assert(_shuffleHistory.length === 1 && next !== state.currentIndex, 'New browse queue reused old shuffle history');
+    state.shuffle = false;
+    _shuffleHistory = [];
+  });
   await test('queue actions and favorites browse stay local', async () => {
     await playIndex(0, songs([111, 112, 113]));
     renderPlaylist(songs([114]));
@@ -104,6 +114,33 @@ async function checks(audioUrl) {
     favMap = { 111: { ...song(111), ar: [{ name: 'Artist' }], al: {}, at: Date.now() } };
     document.getElementById('tab-favorites').click();
     assert(document.querySelector('#playlist-wrap [data-song-id="111"]'), 'Favorites browse did not render');
+  });
+  await test('search tab restores its own browse list', async () => {
+    routes.set('search:tab', () => ({ result: { songs: songs([121]) } }));
+    input.value = 'tab';
+    click('#tab-search');
+    await until(() => document.querySelector('#playlist-wrap [data-song-id="121"]'), 'Search tab kept another browse list');
+  });
+  await test('keyboard activation and Escape keep control state aligned', async () => {
+    renderPlaylist(songs([141, 142]));
+    document.querySelector('#playlist-wrap [data-song-id="142"]').dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ', code: 'Space' }));
+    await selected(142);
+    click('#btn-tuner');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    assert(document.getElementById('tuner-panel').classList.contains('hidden') && !document.getElementById('btn-tuner').classList.contains('active'), 'Escape left tuner state out of sync');
+  });
+  await test('stale recommendations cannot overwrite another browse view', async () => {
+    const rec = deferred();
+    _recCache = null;
+    routes.set('/top/song', () => rec.promise);
+    const pending = renderRecommendations();
+    favMap = { 131: { ...song(131), ar: [{ name: 'Artist' }], al: {}, at: Date.now() } };
+    click('#tab-favorites');
+    rec.resolve({ data: songs([132]) });
+    await pending;
+    assert(document.querySelector('#playlist-wrap [data-song-id="131"]') && !document.querySelector('#playlist-wrap [data-song-id="132"]'), 'Stale recommendations replaced the active browse view');
+    click('#playlist-wrap [data-song-id="131"]'); await selected(131);
+    assert(document.querySelector('#playlist-wrap .history-header')?.textContent === '我的喜欢', 'Playing from Favorites replaced the active browse view');
   });
   await test('stale searches, edited queries, and cleared input cannot repaint', async () => {
     const old = deferred(); routes.set('search:old', () => old.promise);
