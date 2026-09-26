@@ -50,19 +50,32 @@ This runs two steps:
    [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) into
    `api-staging/`, which `electron-builder` bundles into the app's
    `extraResources` as `api-runtime`.
-2. `electron-builder --mac --dir` packages an **unpacked** `.app` (no installer)
-   for both Apple silicon and Intel.
+2. `electron-builder` packages signed-release-ready DMG and ZIP installers for
+   both Apple silicon and Intel. Packaged Nebula checks the GitHub Releases page
+   on launch, downloads a newer release in the background, and installs it on
+   the next quit.
 
-The built app appears under `dist/`:
+The built installers appear under `dist/`:
 
 ```bash
-open "dist/mac-arm64/Nebula.app"   # Apple silicon
-open "dist/mac/Nebula.app"         # Intel
+open "dist/Nebula-1.0.1-arm64.dmg" # Apple silicon example
+open "dist/Nebula-1.0.1.dmg"        # Intel example
 ```
 
 On first launch the app spawns the bundled NetEase API on `127.0.0.1:3000`,
 waits for it to become ready, then opens the player window — no separate server
 step is needed for the packaged build.
+
+## Keep the project checkout current
+
+Run this when opening the project in a development tab:
+
+```bash
+npm run sync:latest
+```
+
+It fetches `origin/main` and fast-forwards a clean local `main` checkout. Local
+edits and feature branches are left untouched and reported for review.
 
 ## Notes for reviewers
 

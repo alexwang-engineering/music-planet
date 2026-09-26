@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell, nativeTheme } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const { spawn } = require('child_process')
 const path = require('path')
 const http = require('http')
@@ -6,6 +7,22 @@ const http = require('http')
 let mainWindow = null
 let apiProcess = null
 const API_PORT = 3000
+let updaterConfigured = false
+
+function checkForAppUpdate() {
+  if (!app.isPackaged) return
+
+  if (!updaterConfigured) {
+    autoUpdater.autoDownload = true
+    autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.on('checking-for-update', () => console.log('[Updater] Checking for a newer Nebula release'))
+    autoUpdater.on('update-available', info => console.log(`[Updater] Downloading Nebula ${info.version}`))
+    autoUpdater.on('update-downloaded', info => console.log(`[Updater] Nebula ${info.version} will install on next quit`))
+    autoUpdater.on('error', err => console.warn('[Updater] Update check failed:', err.message))
+    updaterConfigured = true
+  }
+  autoUpdater.checkForUpdates().catch(err => console.warn('[Updater] Update check failed:', err.message))
+}
 
 function sanitizeApiLog(chunk) {
   return chunk
@@ -108,8 +125,10 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
+  checkForAppUpdate()
 
   app.on('activate', () => {
+    checkForAppUpdate()
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })

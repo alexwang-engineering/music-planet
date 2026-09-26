@@ -1,14 +1,15 @@
 {
   "name": "music-planet",
   "productName": "Nebula",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "3D NetEase Cloud Music Player",
   "license": "Apache-2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "sync:latest": "node scripts/sync-latest.mjs",
     "predist": "rm -rf api-staging && mkdir -p api-staging && cd api-staging && npm init -y > /dev/null 2>&1 && npm pkg set overrides.music-metadata=11.14.0 && npm i --omit=dev --no-audit --no-fund NeteaseCloudMusicApi@4.32.0",
-    "dist": "electron-builder --mac --dir"
+    "dist": "electron-builder --mac --publish never"
   },
   "build": {
     "appId": "com.wjl.music-planet",
@@ -18,7 +19,14 @@
       "icon": "build/icon.icns",
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64",
             "x64"
@@ -26,6 +34,14 @@
         }
       ]
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "alexwang-engineering",
+        "repo": "music-planet",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "main.js",
       "app/**/*"
@@ -46,6 +62,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "NeteaseCloudMusicApi": "^4.32.0"
   },
   "overrides": {

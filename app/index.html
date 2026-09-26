@@ -1518,6 +1518,7 @@ const vertexShader = `
   uniform float uMid;
   uniform float uHigh;
   uniform float uBeatFlash;
+  uniform float uBeatPulse;
   uniform float uSpikeMul;
   uniform float uWireModeMix;
   uniform float uWireBass;
@@ -1590,6 +1591,8 @@ const vertexShader = `
     float n2 = snoise(warpedPos * 2.2 - uTime * 0.07 * beatTimeBoost) * n2amp;
     float n3 = snoise(warpedPos * 3.8 + uTime * 0.10) * (0.20 + uHigh * 0.14);
     float noise = n1 + n2 + n3;
+    float motionScale = mix(1.0, 0.58, uReducedMotion);
+    float beatKick = min(pow(max(noise, 0.0), 1.5) * uBeatPulse * 0.26 * uSpikeMul, 0.10);
 
     // Frequency topology: bass energy concentrated near poles, treble along equator
     float poleAxis = abs(normalize(position).y);
@@ -1605,17 +1608,16 @@ const vertexShader = `
     float spikeAmp = (uBass * 0.085 + uBeatFlash * 0.075) * uSpikeMul;
     float planetDisplacement = noise * (0.030 + spikeAmp)
                              + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
-                             + windDrift + idleBreath;
+                             + windDrift + idleBreath + beatKick * motionScale;
 
     // Pulse-wire mode uses a dedicated, frequency-accurate 20–180 Hz signal.
     // Quiet audio stays close to a sphere; bass attacks push a bounded set of
     // outward spikes. The mode mix keeps transitions interruptible and smooth.
     float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
     float wirePeak = pow(max(n1 * 0.72 + n3 * 0.28, 0.0), 1.65);
-    float motionScale = mix(1.0, 0.58, uReducedMotion);
     float wireDisplacement = noise * 0.007
                            + wirePeak * wireEnergy * 0.25 * uSpikeMul
-                           + max(noise, 0.0) * wireEnergy * 0.035;
+                           + max(noise, 0.0) * wireEnergy * 0.035 + beatKick;
     wireDisplacement = clamp(wireDisplacement * motionScale, -0.025, 0.27);
     float displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
 
@@ -1893,6 +1895,7 @@ const sphereMat = new THREE.ShaderMaterial({
     uColor1:     { value: new THREE.Color(0x2A0B3D) },
     uColor2:     { value: new THREE.Color(0x7A2CFF) },
     uBeatFlash:  { value: 0 },
+    uBeatPulse:  { value: 0 },
     uFlux:       { value: 0 },
     uSpikeMul:   { value: 1 },
     uWireModeMix:{ value: 0 },
@@ -2595,18 +2598,14 @@ let audioLevel = 0, bassLevel = 0, midLevel = 0, highLevel = 0;
 let fluxLevel = 0, brightnessLevel = 0;
 let wireBassLevel = 0;
 let prevDataArray = null;
-// Rolling 90-frame bass history for dynamic beat threshold (~1.5s at 60fps)
-const bassHistory = new Float32Array(90);
-let bassHistIdx = 0;
-// Bass-band spectral flux — the kick-attack signal. Absolute bass level fails
+// 20–180 Hz spectral flux — the kick-attack signal. Absolute bass level fails
 // on sustained-808 tracks (rap: level never dips → threshold chases it and no
 // beat ever fires); flux spikes on every new attack regardless of level.
 let bassFluxLevel = 0;
-const bassFluxHistory = new Float32Array(43);   // ~0.7s local window
-let bassFluxIdx = 0;
+let bassFluxMean = 0;
 let _prevBassFlux = 0;
 
-function updateAudio() {
+function updateAudio(delta) {
   if (!analyser) { wireBassLevel = 0; return; }
   if (audioCtx.state === 'suspended') audioCtx.resume();
   analyser.getByteFrequencyData(dataArray);
@@ -2649,12 +2648,12 @@ function updateAudio() {
       const d = dataArray[i] - prevDataArray[i];
       if (d > 0) {
         fluxSum += d;
-        if (i < bassBins) bassFluxSum += d;
+        if (i >= wireBassStartBin && i <= wireBassEndBin) bassFluxSum += d;
       }
     }
   }
   const rawFlux = Math.min(fluxSum / (binCount * 60), 1.0);
-  const rawBassFlux = Math.min(bassFluxSum / (bassBins * 48), 1.0);
+  const rawBassFlux = Math.min(bassFluxSum / (wireBinCount * 48), 1.0);
 
   const atk = 0.68, rel = 0.08;
   bassLevel       = rawBass       > bassLevel       ? bassLevel       + (rawBass       - bassLevel)       * atk : bassLevel       + (rawBass       - bassLevel)       * rel;
@@ -2664,16 +2663,10 @@ function updateAudio() {
   fluxLevel       = rawFlux       > fluxLevel       ? fluxLevel       + (rawFlux       - fluxLevel)       * 0.70 : fluxLevel       + (rawFlux       - fluxLevel)       * 0.18;
   audioLevel      = audioLevel    + (rawOverall     - audioLevel)     * 0.15;
 
-  // Update rolling bass history for dynamic beat threshold
-  bassHistory[bassHistIdx] = bassLevel;
-  bassHistIdx = (bassHistIdx + 1) % bassHistory.length;
-
-  // Fast-attack bass flux + rolling local window for the adaptive threshold
-  bassFluxLevel = rawBassFlux > bassFluxLevel
-    ? bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.85
-    : bassFluxLevel + (rawBassFlux - bassFluxLevel) * 0.25;
-  bassFluxHistory[bassFluxIdx] = bassFluxLevel;
-  bassFluxIdx = (bassFluxIdx + 1) % bassFluxHistory.length;
+  // Fast attack, short release, and a time-based local mean for beat detection.
+  const fluxRate = 1 - Math.exp(-delta / (rawBassFlux > bassFluxLevel ? 0.009 : 0.058));
+  bassFluxLevel += (rawBassFlux - bassFluxLevel) * fluxRate;
+  bassFluxMean += (bassFluxLevel - bassFluxMean) * (1 - Math.exp(-delta / 0.35));
 
   // Save this frame's spectrum for next-frame flux
   if (!prevDataArray) prevDataArray = new Uint8Array(binCount);
@@ -2694,7 +2687,6 @@ let _themeAccentColor = new THREE.Color(0x3a1280); // default: dark violet match
 const _glowTarget = new THREE.Color(); // scratch for per-frame blended glow target
 
 // Beat detection state
-let prevBass    = 0;
 let beatFlash   = 0;
 let beatCooldown = 0;
 let spherePulse = 0;
@@ -2758,12 +2750,12 @@ let _breathe2Phase = 0;
 // ║     applyEnvColor() must NOT set their color. No render-loop       ║
 // ║     lerp toward theme color is allowed.                            ║
 // ║                                                                    ║
-// ║  4. SCALE CAP: sScale is clamped to 1.06 maximum. Do not raise    ║
+// ║  4. SCALE CAP: sScale is clamped to 1.12 maximum. Do not raise    ║
 // ║     this value. It prevents the anti-explosion constraint breach.  ║
 // ║                                                                    ║
 // ║  5. VERTEX AUDIO: raw audio data must not directly drive vertex    ║
-// ║     positions. All displacement must go through _sBass/_sMid/      ║
-// ║     _sHigh smoothed signals with clamp.                            ║
+// ║     positions. Displacement uses smoothed bands or a bounded beat  ║
+// ║     pulse, with a clamp on the added kick.                         ║
 // ║                                                                    ║
 // ║  6. HUE STABILITY: beat flare must only adjust saturation/         ║
 // ║     lightness, never hue — it reads back whatever hue the theme/   ║
@@ -2988,17 +2980,16 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   time += delta;
 
-  updateAudio();
+  updateAudio(delta);
+  beatFlash *= Math.exp(-delta / 0.13);
+  spherePulse *= Math.exp(-delta / 0.15);
 
   // ── Beat onset detection: bass-band spectral flux + adaptive threshold ──
   // Standard visualizer technique (flux = positive spectral change = attack
   // transients). Unlike absolute bass level, this fires on every kick even in
   // sustained-808 rap where the level never dips below its own average.
-  if (beatCooldown > 0) beatCooldown--;
-  let _fluxMean = 0;
-  for (let i = 0; i < bassFluxHistory.length; i++) _fluxMean += bassFluxHistory[i];
-  _fluxMean /= bassFluxHistory.length;
-  const fluxThreshold = Math.max(_fluxMean * 1.45, 0.045) / Math.max(VIZ.sens, 0.25);
+  beatCooldown = Math.max(0, beatCooldown - delta);
+  const fluxThreshold = Math.max(bassFluxMean * 1.45, 0.045) / Math.max(VIZ.sens, 0.25);
   const onBeat = bassFluxLevel > fluxThreshold && bassFluxLevel > _prevBassFlux * 1.05 && beatCooldown === 0;
   // Hit strength 0..1.6 — how far this attack rises above the local average
   const beatStrength = onBeat
@@ -3006,15 +2997,16 @@ function animate() {
     : 0;
   if (onBeat) {
     beatFlash     = Math.min((0.26 + beatStrength * 0.20) * VIZ.beat, 0.85);
-    spherePulse   = (0.15 + beatStrength * 0.10) * VIZ.beat;
+    spherePulse   = Math.min((0.18 + beatStrength * 0.14) * VIZ.beat, 0.48);
     _beatShake    = (0.28 + beatStrength * 0.22) * VIZ.camera;
     _beatHueBurst = 0.3;
     // Adaptive cooldown — tracks actual beat interval so fast songs stay locked
     if (_lastBeatTime > 0) {
-      _beatInterval = _beatInterval * 0.82 + (time - _lastBeatTime) * 0.18;
+      const gap = time - _lastBeatTime;
+      _beatInterval = gap > 1.5 ? 0.50 : _beatInterval * 0.82 + gap * 0.18;
     }
     _lastBeatTime = time;
-    beatCooldown = Math.max(6, Math.round(_beatInterval * 60 * 0.38));
+    beatCooldown = Math.max(0.10, _beatInterval * 0.38);
     // Phase nudge: small jolt in the breathing cycle — creates a visual "heartbeat" shudder
     _breathePhase  += 0.20;
     _breathe2Phase += 0.32;
@@ -3028,10 +3020,7 @@ function animate() {
     pendingShockwave2 = 0;
   }
   if (pendingShockwave2 > 0) pendingShockwave2 = 0;
-  prevBass    = bassLevel;
   _prevBassFlux = bassFluxLevel;
-  beatFlash     *= 0.88; // slower decay → more sustained beat punch (was 0.82)
-  spherePulse   *= 0.90;
   _beatShake    *= 0.75;
   _beatHueBurst *= 0.84;
 
@@ -3053,7 +3042,11 @@ function animate() {
   _ringPhase += delta * VIZ.ringFreq * Math.PI * 2;
   _ringAmp *= Math.exp(-VIZ.ringDecay * delta);
   const ring = Math.sin(_ringPhase) * _ringAmp;
-  const sScale = Math.max(0.91, Math.min(1.0 + _breathe * 0.45 + bandRadial + ring, 1.12));
+  const beatMotion = reducedMotionQuery.matches ? 0.35 : 1.0;
+  const sScale = Math.max(0.91, Math.min(
+    1.0 + _breathe * 0.45 + bandRadial + (ring + spherePulse * 0.14) * beatMotion,
+    1.12
+  ));
   sphere.scale.set(sScale, sScale, sScale);
 
   // Per-band smoothing — brief targets: bass 0.055/frame, mid 0.04/frame, treble 0.025/frame at 60fps
@@ -3088,6 +3081,7 @@ function animate() {
   sphereMat.uniforms.uMid.value        = Math.min(_sMid  * 1.25, 1.0);
   sphereMat.uniforms.uHigh.value       = Math.min(_sHigh * 1.30, 1.0);
   sphereMat.uniforms.uBeatFlash.value  = beatFlash;
+  sphereMat.uniforms.uBeatPulse.value  = spherePulse;
   sphereMat.uniforms.uFlux.value       = fluxLevel * 0.95;
   sphereMat.uniforms.uSpikeMul.value   = VIZ.spike;
   sphereMat.uniforms.uWireBass.value   = Math.min(_sWireBass, 1.0);
@@ -3133,7 +3127,7 @@ function animate() {
   }
 
   // ── Dual-layer glow: core solid, halo faint ──────────────────────
-  const coreScale = 1.0 + _sBass * 0.07 + spherePulse * 0.05 + beatFlash * 0.04;
+  const coreScale = Math.min(sScale + _sBass * 0.02, 1.14);
   _corePulsePhase += delta * (1.8 + _sAudio * 2.2 + spherePulse * 1.8);
   const _corePulse = 0.90 + Math.sin(_corePulsePhase) * 0.10;
   coreMat.uniforms.uIntensity.value = Math.min((0.88 + _sBass * 0.40 + beatFlash * 0.55) * _corePulse, 1.60) * _wireEnvironment;
@@ -3546,7 +3540,7 @@ function parseLRC(lrc) {
 // LYRIC SYNC
 // ===================================================================
 function syncLyrics() {
-  if (!state.lyrics.length) return;
+  if (!state.lyrics.length || audioRequestId !== playRequestId) return;
   const t = audio.currentTime;
   let idx = -1;
   for (let i = state.lyrics.length - 1; i >= 0; i--) {
@@ -3618,6 +3612,7 @@ function renderPlaylist(songs) {
     const div = document.createElement('div');
     div.className = 'song-item';
     div.dataset.idx = i;
+    div.dataset.songId = song.id;
 
     // Thumbnail
     let thumbHtml;
@@ -3639,14 +3634,16 @@ function renderPlaylist(songs) {
       <div class="eq-icon"><span></span><span></span><span></span></div>
       ${dur ? `<div class="song-dur">${dur}</div>` : ''}
     `;
-    div.addEventListener('click', () => playIndex(i));
+    div.addEventListener('click', () => playIndex(i, songs));
     wrap.appendChild(div);
   });
+  updatePlaylistActive();
 }
 
-function updatePlaylistActive(idx) {
-  document.querySelectorAll('.song-item').forEach((el, i) => {
-    el.classList.toggle('active', i === idx);
+function updatePlaylistActive() {
+  const songId = state.playlist[state.currentIndex]?.id;
+  document.querySelectorAll('.song-item').forEach(el => {
+    el.classList.toggle('active', songId != null && el.dataset.songId === String(songId));
   });
 }
 
@@ -3654,16 +3651,24 @@ function updatePlaylistActive(idx) {
 // PLAY SONG
 // ===================================================================
 let loading = false;
+let playRequestId = 0;
+let audioRequestId = 0;
 
-async function playIndex(idx) {
-  if (loading) return;
-  if (idx < 0 || idx >= state.playlist.length) return;
+async function playIndex(idx, songs = state.playlist) {
+  if (!Number.isInteger(idx) || idx < 0 || idx >= songs.length) return;
 
-  document.querySelector('.bar-song-info').classList.add('fade-out');
-
+  const requestId = ++playRequestId;
+  const isCurrent = () => requestId === playRequestId;
+  cancelFade();
+  audio.volume = state.volume;
+  if (songs !== state.playlist) {
+    state.playlist = songs.slice();
+    _shuffleHistory = [];
+  }
   loading = true;
   state.currentIndex = idx;
-  updatePlaylistActive(idx);
+  updatePlaylistActive();
+  if (_queueOpen) renderQueue();
 
   const song = state.playlist[idx];
   const songId = song.id;
@@ -3679,24 +3684,12 @@ async function playIndex(idx) {
   state.currentLyricIndex = -1;
   renderLyrics([]);
 
-  try {
-    const [urlData, detail, lyricStr] = await Promise.all([
-      getSongUrl(songId).catch(() => null),
-      getSongDetail(songId).catch(() => null),
-      getLyric(songId).catch(() => ({ lrc: '', tlyric: '' })),
-    ]);
-
-    if (!urlData) {
-      showToast(`"${song.name}" 无版权/需VIP，已跳过`);
-      document.querySelector('.bar-song-info').classList.remove('fade-out');
-      loading = false;
-      const next = idx + 1;
-      if (next < state.playlist.length) playIndex(next);
-      return;
-    }
-
+  let displayedArtUrl = '';
+  function updateDetails(detail) {
+    if (!isCurrent()) return;
     // Album art — fall back to picUrl from search result if detail call failed
     const artUrl = detail?.al?.picUrl || song.al?.picUrl || song.album?.picUrl || '';
+    displayedArtUrl = artUrl;
     const barArt = document.getElementById('bar-art');
     const barArtPlaceholder = document.getElementById('bar-art-placeholder');
     const rightArt = document.getElementById('right-album-art');
@@ -3708,7 +3701,9 @@ async function playIndex(idx) {
       rightArt.src = artUrl + '?param=512y512';
       rightArt.style.display = 'block';
       rightPlaceholder.style.display = 'none';
-      extractAccentColor(artUrl + '?param=50y50', applyAccentColor);
+      extractAccentColor(artUrl + '?param=50y50', (cssColor, threeColor) => {
+        if (isCurrent() && displayedArtUrl === artUrl) applyAccentColor(cssColor, threeColor);
+      });
     } else {
       barArt.src = '';
       barArt.style.display = 'none';
@@ -3723,8 +3718,6 @@ async function playIndex(idx) {
     if (rightTitle) rightTitle.textContent = song.name || '';
     if (rightArtist) rightArtist.textContent = artistStr;
 
-    document.querySelector('.bar-song-info').classList.remove('fade-out');
-
     // Window title (Cmd+Tab / dock context) + heart state + system media controls
     document.title = `${song.name || ''} · ${artistStr} — Nebula`;
     updateLikeUI();
@@ -3736,32 +3729,62 @@ async function playIndex(idx) {
         artwork: artUrl ? [{ src: artUrl + '?param=512y512', sizes: '512x512', type: 'image/jpeg' }] : [],
       });
     }
+  }
 
-    // Lyrics + translation
-    const _lrcLines = parseLRC(lyricStr.lrc);
-    const _tLines   = parseLRC(lyricStr.tlyric || '');
-    const _transMap = new Map(_tLines.map(l => [l.time, l.text]));
-    state.lyrics = _lrcLines;
-    renderLyrics(_lrcLines, _transMap);
+  // Optional metadata must never hold up playback or overwrite a newer choice.
+  updateDetails(null);
+  getSongDetail(songId).then(detail => {
+    if (detail) updateDetails(detail);
+  }).catch(() => {});
+  getLyric(songId).then(lyricStr => {
+    if (!isCurrent()) return;
+    const lines = parseLRC(lyricStr.lrc);
+    const translations = new Map(parseLRC(lyricStr.tlyric || '').map(l => [l.time, l.text]));
+    state.lyrics = lines;
+    state.currentLyricIndex = -1;
+    renderLyrics(lines, translations);
+    syncLyrics();
+  }).catch(() => {});
+
+  try {
+    const urlData = await getSongUrl(songId);
+    if (!isCurrent()) return;
+    if (!urlData) {
+      showToast(`"${song.name}" 无版权/需VIP，已跳过`);
+      const next = idx + 1;
+      if (next < state.playlist.length) {
+        playIndex(next);
+      } else {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      return;
+    }
 
     // Crossfade: fade out → switch → fade in
     initAudio();
     if (!audio.paused && audio.currentTime > 0) {
-      await fadeTo(0, 280);
+      const completed = await fadeTo(0, 280);
+      if (!completed || !isCurrent()) return;
     }
+    if (!isCurrent()) return;
+    audioRequestId = requestId;
     audio.crossOrigin = 'anonymous';  // re-arm viz even after a per-song CORS fallback
     audio.src = urlData;
     audio.volume = 0;
-    await audio.play().catch(e => console.warn('Play error:', e));
+    await audio.play().catch(e => { if (isCurrent()) console.warn('Play error:', e); });
+    if (!isCurrent()) return;
     fadeTo(state.volume, 350);
     addToHistory(song);
-
+    return requestId;
   } catch (err) {
+    if (!isCurrent()) return;
     showToast('加载失败，请检查 API 服务');
     console.error(err);
+  } finally {
+    if (isCurrent()) loading = false;
   }
-
-  loading = false;
 }
 
 // ===================================================================
@@ -3790,6 +3813,7 @@ audio.addEventListener('pause', () => {
 });
 
 audio.addEventListener('ended', () => {
+  if (loading || audioRequestId !== playRequestId) return;
   if (state.repeat === 2) {
     audio.currentTime = 0;
     audio.play().catch(() => {});
@@ -3804,6 +3828,7 @@ audio.addEventListener('ended', () => {
 // the same source once without it — playback beats visualization.
 let _corsRetriedSrc = '';
 audio.addEventListener('error', () => {
+  if (audioRequestId !== playRequestId) return;
   if (audio.crossOrigin && audio.src && _corsRetriedSrc !== audio.src) {
     _corsRetriedSrc = audio.src;
     const src = audio.src;
@@ -3817,7 +3842,11 @@ audio.addEventListener('error', () => {
   }
   audio.crossOrigin = 'anonymous';  // restore for the next song
   showToast('播放出错，跳至下一首');
-  setTimeout(() => playIndex(state.currentIndex + 1), 1000);
+  const requestId = playRequestId;
+  const next = state.currentIndex + 1;
+  setTimeout(() => {
+    if (requestId === playRequestId) playIndex(next);
+  }, 1000);
 });
 
 // Save position when pausing / quitting — previously only the 5s interval while
@@ -3861,7 +3890,7 @@ document.getElementById('btn-play-pause').addEventListener('click', () => {
 });
 
 document.getElementById('btn-prev').addEventListener('click', () => {
-  if (audio.currentTime > 3) {
+  if (!loading && audioRequestId === playRequestId && audio.currentTime > 3) {
     audio.currentTime = 0;
   } else {
     const idx = state.currentIndex <= 0 ? state.playlist.length - 1 : state.currentIndex - 1;
@@ -4102,9 +4131,18 @@ document.addEventListener('click', (e) => {
 // CROSSFADE
 // ===================================================================
 let _cfTimer = null;
-function fadeTo(targetVol, durationMs) {
+let _cfResolve = null;
+function cancelFade() {
   clearInterval(_cfTimer);
+  _cfTimer = null;
+  if (_cfResolve) _cfResolve(false);
+  _cfResolve = null;
+}
+
+function fadeTo(targetVol, durationMs) {
+  cancelFade();
   return new Promise(resolve => {
+    _cfResolve = resolve;
     const start = audio.volume;
     const steps = 20;
     const stepMs = durationMs / steps;
@@ -4112,7 +4150,13 @@ function fadeTo(targetVol, durationMs) {
     _cfTimer = setInterval(() => {
       s++;
       audio.volume = Math.max(0, Math.min(1, start + (targetVol - start) * s / steps));
-      if (s >= steps) { clearInterval(_cfTimer); audio.volume = targetVol; resolve(); }
+      if (s >= steps) {
+        clearInterval(_cfTimer);
+        _cfTimer = null;
+        _cfResolve = null;
+        audio.volume = targetVol;
+        resolve(true);
+      }
     }, stepMs);
   });
 }
@@ -4131,7 +4175,7 @@ function savePrefs() {
 const RESUME_QUEUE_CAP = 500;   // keep localStorage well under quota (~100KB at 500 songs)
 
 function saveResume() {
-  if (state.currentIndex < 0 || !state.playlist.length) return;
+  if (loading || audioRequestId !== playRequestId || state.currentIndex < 0 || !state.playlist.length) return;
   // Persist the whole queue (trimmed fields), not just the current song,
   // so a restart restores the full playing context with working next/prev.
   const queue = state.playlist.slice(0, RESUME_QUEUE_CAP).map(s => ({
@@ -4224,10 +4268,14 @@ function teardownVisualizer() {
     state.playlist = rQueue;
     const rIdx = Math.min(Math.max(resume.idx ?? 0, 0), rQueue.length - 1);
     const t = resume.time || 0;
+    const restoreRequestId = playRequestId;
     setTimeout(async () => {
-      await playIndex(rIdx);
-      if (t > 3) {
-        setTimeout(() => { audio.currentTime = t; }, 800);
+      if (playRequestId !== restoreRequestId) return;
+      const requestId = await playIndex(rIdx);
+      if (requestId && t > 3) {
+        setTimeout(() => {
+          if (requestId === playRequestId && requestId === audioRequestId) audio.currentTime = t;
+        }, 800);
       }
     }, 800);
   }
@@ -4333,7 +4381,9 @@ document.getElementById('btn-sleep').addEventListener('click', () => {
       clearInterval(_sleepTimer);
       _sleepStep = 0;
       updateSleepUI();
-      fadeTo(0, 2500).then(() => { audio.pause(); audio.volume = state.volume; });
+      fadeTo(0, 2500).then(completed => {
+        if (completed) { audio.pause(); audio.volume = state.volume; }
+      });
       showToast('已停止播放 · 晚安');
     }
   }, 1000);
@@ -4462,9 +4512,11 @@ document.getElementById('btn-like').addEventListener('click', toggleLike);
 // SEARCH
 // ===================================================================
 let searchTimer = null;
+let searchRequestId = 0;
 
 document.getElementById('search-input').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
+  ++searchRequestId;
   const q = e.target.value.trim();
   if (!q) {
     // Show history in the browse list but leave the play queue untouched.
@@ -4483,18 +4535,19 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
 });
 
 async function performSearch(q) {
+  const requestId = ++searchRequestId;
   const wrap = document.getElementById('playlist-wrap');
   wrap.innerHTML = '<div id="empty-state"><div class="spinner"></div></div>';
 
   try {
     const songs = await searchSongs(q);
-    state.playlist = songs;
-    state.currentIndex = -1;
+    if (requestId !== searchRequestId) return;
     renderPlaylist(songs);
     if (!songs.length) {
       wrap.innerHTML = `<div id="empty-state"><span style="color:rgba(255,255,255,0.35);font-size:13px">没有找到 "${escHtml(q)}"</span></div>`;
     }
   } catch (err) {
+    if (requestId !== searchRequestId) return;
     console.error(err);
     if (err.message.includes('Failed to fetch') || err.name === 'TimeoutError') {
       wrap.innerHTML = `<div id="status-msg">
@@ -4549,8 +4602,9 @@ function addToHistory(song) {
 }
 
 function renderHistory() {
+  const songs = playHistory.slice();
   const wrap = document.getElementById('playlist-wrap');
-  if (!playHistory.length) {
+  if (!songs.length) {
     wrap.innerHTML = `<div id="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.12)"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg>
       <span>搜索你喜欢的音乐</span>
@@ -4558,12 +4612,12 @@ function renderHistory() {
     return;
   }
   wrap.innerHTML = `<div class="history-header">最近播放</div>` +
-    playHistory.map((s, i) => {
+    songs.map((s, i) => {
       const artist = (s.artists || s.ar || []).map(a => a.name).join(' / ') || '未知';
       const artUrl = s.al?.picUrl ? s.al.picUrl + '?param=60y60' : '';
       const dur = formatTime((s.dt || 0) / 1000);
       const fee = (s.fee === 1 || s.fee === 4) ? '<span class="vip-badge">VIP</span>' : '';
-      return `<div class="song-item" data-hist-idx="${i}" role="button" tabindex="0">
+      return `<div class="song-item" data-hist-idx="${i}" data-song-id="${escHtml(s.id)}" role="button" tabindex="0">
         ${artUrl
           ? `<img class="song-thumb" src="${escHtml(artUrl)}" alt="" loading="lazy">`
           : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`}
@@ -4579,11 +4633,10 @@ function renderHistory() {
     el.addEventListener('click', () => {
       // Queue becomes the whole history list so next/prev keep working.
       const idx = parseInt(el.dataset.histIdx);
-      state.playlist = playHistory.slice();
-      state.currentIndex = -1;
-      playIndex(idx);
+      playIndex(idx, songs);
     });
   });
+  updatePlaylistActive();
 }
 
 // Show history immediately on startup
@@ -4616,20 +4669,22 @@ function markLoggedIn(uid) {
 // ===================================================================
 let userPlaylists = [];
 let activePlaylistId = null;
+let playlistRequestId = 0;
 
 async function loadUserPlaylists(uid) {
-  const wrap = document.getElementById('mylist-wrap');
-  const back = document.getElementById('back-to-playlists');
+  const requestId = ++playlistRequestId;
   try {
     const data = await api(`/user/playlist?uid=${uid}&limit=50&timestamp=${Date.now()}`);
+    if (requestId !== playlistRequestId) return;
     userPlaylists = data.playlist || [];
     renderPlaylistList();
   } catch (e) {
-    userPlaylists = [];
+    if (requestId === playlistRequestId) userPlaylists = [];
   }
 }
 
 function renderPlaylistList() {
+  ++playlistRequestId;
   const wrap = document.getElementById('mylist-wrap');
   const back = document.getElementById('back-to-playlists');
   back.style.display = 'none';
@@ -4659,6 +4714,7 @@ function renderPlaylistList() {
 }
 
 async function loadPlaylistTracks(playlistId, playlistName) {
+  const requestId = ++playlistRequestId;
   activePlaylistId = playlistId;
   const wrap = document.getElementById('mylist-wrap');
   const back = document.getElementById('back-to-playlists');
@@ -4671,8 +4727,8 @@ async function loadPlaylistTracks(playlistId, playlistName) {
   wrap.appendChild(loading);
   try {
     const data = await api(`/playlist/track/all?id=${playlistId}&limit=1000&timestamp=${Date.now()}`);
+    if (requestId !== playlistRequestId) return;
     const songs = data.songs || [];
-    state.playlist = songs;
     wrap.removeChild(loading);
     // Render song items in mylist-wrap
     const label = document.createElement('div');
@@ -4686,6 +4742,7 @@ async function loadPlaylistTracks(playlistId, playlistName) {
       const div = document.createElement('div');
       div.className = 'song-item';
       div.dataset.idx = i;
+      div.dataset.songId = song.id;
       let thumbHtml = picUrl
         ? `<img class="song-thumb" src="${escHtml(picUrl)}?param=80y80" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="song-thumb-placeholder" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`
         : `<div class="song-thumb-placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3v12.5A4 4 0 105 19V9l10-2v8.5A4 4 0 1011 19V7L9 3z"/></svg></div>`;
@@ -4698,11 +4755,12 @@ async function loadPlaylistTracks(playlistId, playlistName) {
         <div class="eq-icon"><span></span><span></span><span></span></div>
         ${dur ? `<div class="song-dur">${dur}</div>` : ''}
       `;
-      div.addEventListener('click', () => playIndex(i));
+      div.addEventListener('click', () => playIndex(i, songs));
       wrap.appendChild(div);
     });
+    updatePlaylistActive();
   } catch (e) {
-    loading.textContent = '加载失败: ' + e.message;
+    if (requestId === playlistRequestId) loading.textContent = '加载失败: ' + e.message;
   }
 }
 
