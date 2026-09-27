@@ -130,14 +130,15 @@ async function checks(audioUrl) {
     assert(document.getElementById('tuner-panel').classList.contains('hidden') && !document.getElementById('btn-tuner').classList.contains('active'), 'Escape left tuner state out of sync');
   });
   await test('cinematic drawers and More preserve focus and visibility state', async () => {
+    assert(document.getElementById('left-panel').inert && document.getElementById('right-panel').inert, 'Closed drawers remain keyboard reachable');
     click('#btn-browse');
-    assert(document.body.classList.contains('browse-open') && document.getElementById('btn-browse').getAttribute('aria-expanded') === 'true', 'Browse drawer did not open');
+    assert(!document.getElementById('left-panel').inert && document.body.classList.contains('browse-open') && document.getElementById('btn-browse').getAttribute('aria-expanded') === 'true', 'Browse drawer did not open');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    assert(!document.body.classList.contains('browse-open') && document.activeElement === document.getElementById('btn-browse'), 'Escape did not close Browse drawer or restore focus');
+    assert(document.getElementById('left-panel').inert && !document.body.classList.contains('browse-open') && document.activeElement === document.getElementById('btn-browse'), 'Escape did not close Browse drawer or restore focus');
     click('#btn-now-playing');
-    assert(document.body.classList.contains('now-playing-open') && document.getElementById('btn-now-playing').getAttribute('aria-expanded') === 'true', 'Now Playing drawer did not open');
+    assert(!document.getElementById('right-panel').inert && document.body.classList.contains('now-playing-open') && document.getElementById('btn-now-playing').getAttribute('aria-expanded') === 'true', 'Now Playing drawer did not open');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    assert(!document.body.classList.contains('now-playing-open') && document.activeElement === document.getElementById('btn-now-playing'), 'Escape did not close Now Playing drawer or restore focus');
+    assert(document.getElementById('right-panel').inert && !document.body.classList.contains('now-playing-open') && document.activeElement === document.getElementById('btn-now-playing'), 'Escape did not close Now Playing drawer or restore focus');
     click('#btn-more');
     assert(!document.getElementById('more-panel').classList.contains('hidden') && document.getElementById('more-panel').contains(document.getElementById('btn-visual')), 'More panel did not group visual controls');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));

@@ -4603,6 +4603,7 @@ let _nowPlayingTrigger = null;
 function setBrowseOpen(open, focusSearch = false, trigger = null) {
   const button = document.getElementById('btn-browse');
   const input = document.getElementById('search-input');
+  const panel = document.getElementById('left-panel');
   const wasOpen = _browseOpen;
   if (open && !wasOpen) {
     _browseTrigger = trigger || (document.activeElement instanceof HTMLElement && document.activeElement !== document.body && document.activeElement !== input ? document.activeElement : button);
@@ -4610,6 +4611,8 @@ function setBrowseOpen(open, focusSearch = false, trigger = null) {
   }
   _browseOpen = open;
   document.body.classList.toggle('browse-open', open);
+  panel.inert = !open;
+  panel.setAttribute('aria-hidden', String(!open));
   button.classList.toggle('active', open);
   button.setAttribute('aria-expanded', String(open));
   if (open && focusSearch) requestAnimationFrame(() => { if (_browseOpen) input.focus(); });
@@ -4618,6 +4621,7 @@ function setBrowseOpen(open, focusSearch = false, trigger = null) {
 
 function setNowPlayingOpen(open, trigger = null) {
   const button = document.getElementById('btn-now-playing');
+  const panel = document.getElementById('right-panel');
   const wasOpen = _nowPlayingOpen;
   if (open && !wasOpen) {
     _nowPlayingTrigger = trigger || (document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : button);
@@ -4625,6 +4629,8 @@ function setNowPlayingOpen(open, trigger = null) {
   }
   _nowPlayingOpen = open;
   document.body.classList.toggle('now-playing-open', open);
+  panel.inert = !open;
+  panel.setAttribute('aria-hidden', String(!open));
   button.setAttribute('aria-expanded', String(open));
   if (open) requestAnimationFrame(() => document.getElementById('now-playing-close').focus());
   if (!open && wasOpen && _nowPlayingTrigger instanceof HTMLElement) _nowPlayingTrigger.focus();
@@ -4647,6 +4653,9 @@ document.getElementById('btn-more').addEventListener('click', (e) => {
   e.stopPropagation();
   setMoreOpen(document.getElementById('more-panel').classList.contains('hidden'));
 });
+setBrowseOpen(false);
+setNowPlayingOpen(false);
+
 document.addEventListener('click', (e) => {
   const panel = document.getElementById('more-panel');
   const button = document.getElementById('btn-more');
