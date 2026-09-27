@@ -1802,10 +1802,10 @@ const vertexShader = `
     float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
     float wirePeak = smoothstep(0.20, 0.72, max(n1, 0.0));
     float wireHit = 0.55 + uBeatFlash * 0.30;
-    float wireDisplacement = noise * 0.004
-                           + wirePeak * wireEnergy * wireHit * 0.095 * uSpikeMul
-                           + max(n1, 0.0) * wireEnergy * 0.012 + beatKick * 0.70;
-    wireDisplacement = clamp(wireDisplacement * motionScale, -0.014, 0.115);
+    float wireDisplacement = noise * 0.003
+                           + wirePeak * wireEnergy * wireHit * 0.050 * uSpikeMul
+                           + max(n1, 0.0) * wireEnergy * 0.006 + beatKick * 0.35;
+    wireDisplacement = clamp(wireDisplacement * motionScale, -0.010, 0.065);
     float displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
 
     vDisplacement = displacement;
@@ -3332,14 +3332,14 @@ function animate() {
   coreMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
   haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
   coreSphere.scale.setScalar(coreScale);
-  // Glow layers breathe with audio — expand outward on bass/beat for dynamic halo
-  glowSphere1.scale.setScalar(1.008 + _sBass * 0.025 + beatFlash * 0.040);
-  glowSphere2.scale.setScalar(1.022 + _sBass * 0.050 + beatFlash * 0.080);
-  // Slight independent drift so the two glow layers show parallax vs the main sphere
-  glowSphere1.rotation.x = Math.sin(time * 0.07) * 0.14;
-  glowSphere1.rotation.z = Math.cos(time * 0.05) * 0.09;
-  glowSphere2.rotation.x = Math.sin(time * 0.11 + 1.2) * 0.10;
-  glowSphere2.rotation.z = Math.cos(time * 0.08 + 0.7) * 0.07;
+  // Pulse Wire keeps glow layers aligned, avoiding a jittery double-outline.
+  const glowLayerMotion = 1 - _wireModeMix;
+  glowSphere1.scale.setScalar(1.008 + (_sBass * 0.025 + beatFlash * 0.040) * glowLayerMotion);
+  glowSphere2.scale.setScalar(1.022 + (_sBass * 0.050 + beatFlash * 0.080) * glowLayerMotion);
+  glowSphere1.rotation.x = Math.sin(time * 0.07) * 0.14 * glowLayerMotion;
+  glowSphere1.rotation.z = Math.cos(time * 0.05) * 0.09 * glowLayerMotion;
+  glowSphere2.rotation.x = Math.sin(time * 0.11 + 1.2) * 0.10 * glowLayerMotion;
+  glowSphere2.rotation.z = Math.cos(time * 0.08 + 0.7) * 0.07 * glowLayerMotion;
 
   // ── Orbit rings — slow, readable motion with bass pulse ─────────────
   _orbitSpinBoost *= 0.88;
