@@ -2888,23 +2888,29 @@ let _ringPhase = 0;
 // All strike/coupling coefficients are multiplied by these; persisted so the
 // user's taste survives restarts. 1 = the shipped default feel.
 const VIZ_DEFAULTS = {
-  beat:      1,    // 打击强度 — flash/pulse/shake per hit
-  beatDecay: 7.5,  // 回弹速度 — whole-ball hit release
-  ring:      1,    // 震颤幅度 — radius oscillation amplitude
-  ringFreq:  11,   // 震颤频率 Hz
-  ringDecay: 5.5,  // 震颤衰减 /s (bigger = stops sooner)
-  spike:     1,    // 尖刺幅度 — surface spikes
-  radius:    1,    // 呼吸幅度 — band-level radius follow
+  beat:      0.80, // 打击强度 — flash/pulse/shake per hit
+  beatDecay: 9.0,  // 回弹速度 — whole-ball hit release
+  ring:      0.35, // 震颤幅度 — radius oscillation amplitude
+  ringFreq:  7,    // 震颤频率 Hz
+  ringDecay: 8.0,  // 震颤衰减 /s (bigger = stops sooner)
+  spike:     0.55, // 尖刺幅度 — surface spikes
+  radius:    0.75, // 呼吸幅度 — band-level radius follow
   sens:      1,    // 鼓点灵敏度 — higher = more beats detected
-  camera:    1,    // 镜头晃动
-  scene:     1,    // 环境联动 — rings/comets/nebula/halo strike coupling
+  camera:    0.35, // 镜头晃动
+  scene:     0.75, // 环境联动 — rings/comets/nebula/halo strike coupling
 };
-const VIZ = Object.assign({}, VIZ_DEFAULTS, (() => {
-  try { return JSON.parse(localStorage.getItem('mp_viz') || '{}'); } catch { return {}; }
-})());
+const LEGACY_VIZ_DEFAULTS = {
+  beat: 1, beatDecay: 7.5, ring: 1, ringFreq: 11, ringDecay: 5.5,
+  spike: 1, radius: 1, sens: 1, camera: 1, scene: 1,
+};
+let savedViz = {};
+try { savedViz = JSON.parse(localStorage.getItem('mp_viz') || '{}'); } catch (_) {}
+const isLegacyVizDefault = Object.keys(LEGACY_VIZ_DEFAULTS).every(key => savedViz[key] === LEGACY_VIZ_DEFAULTS[key]);
+const VIZ = Object.assign({}, VIZ_DEFAULTS, isLegacyVizDefault ? {} : savedViz);
 function saveViz() {
   try { localStorage.setItem('mp_viz', JSON.stringify(VIZ)); } catch (_) {}
 }
+if (isLegacyVizDefault) saveViz();
 
 // Smooth sphere audio — slower response than raw levels (prevents spiky jumps)
 let _sBass = 0, _sMid = 0, _sHigh = 0, _sAudio = 0, _sWireBass = 0;

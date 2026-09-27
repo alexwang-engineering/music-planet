@@ -61,6 +61,9 @@ async function checks(audioUrl) {
   cancelAnimationFrame(_liquidRafId);
   input.value = 'keep-results';
 
+  await test('calm visualizer defaults keep the sphere settled between beats', async () => {
+    assert(VIZ.ring === 0.35 && VIZ.ringFreq === 7 && VIZ.ringDecay === 8 && VIZ.spike === 0.55 && VIZ.camera === 0.35, 'Visualizer defaults are still too aggressive');
+  });
   await test('user selection supersedes delayed startup resume', async () => {
     await playIndex(0, songs([1, 2, 3]));
     await wait(900);
