@@ -1324,6 +1324,12 @@
     box-shadow: 0 8px 24px rgba(0,0,0,0.26);
     backdrop-filter: var(--blur);
     -webkit-backdrop-filter: var(--blur);
+    transition: opacity 160ms ease;
+  }
+  body.browse-open #btn-browse {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
   }
   #btn-browse:hover, #btn-browse.active { color: #fff; border-color: var(--accent-glow); background: rgba(255,255,255,0.09); }
   #browse-close, #now-playing-close {
@@ -1794,12 +1800,12 @@ const vertexShader = `
     // Quiet audio stays close to a sphere; bass attacks push a bounded set of
     // outward spikes. The mode mix keeps transitions interruptible and smooth.
     float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
-    float wirePeak = pow(max(n1 * 0.72 + n3 * 0.28, 0.0), 1.85);
-    float wireHit = 0.28 + uBeatFlash * 0.72;
-    float wireDisplacement = noise * 0.006
-                           + wirePeak * wireEnergy * wireHit * 0.16 * uSpikeMul
-                           + max(noise, 0.0) * wireEnergy * 0.022 + beatKick;
-    wireDisplacement = clamp(wireDisplacement * motionScale, -0.020, 0.18);
+    float wirePeak = smoothstep(0.20, 0.72, max(n1, 0.0));
+    float wireHit = 0.55 + uBeatFlash * 0.30;
+    float wireDisplacement = noise * 0.004
+                           + wirePeak * wireEnergy * wireHit * 0.095 * uSpikeMul
+                           + max(n1, 0.0) * wireEnergy * 0.012 + beatKick * 0.70;
+    wireDisplacement = clamp(wireDisplacement * motionScale, -0.014, 0.115);
     float displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
 
     vDisplacement = displacement;
@@ -2061,9 +2067,9 @@ const fragmentShader = `
 // ===================================================================
 // SPHERE MESH
 // ===================================================================
-// Detail 3 gives a dense, readable topology without the catastrophic memory/
-// triangle cost of detail 30 (detail grows exponentially for an icosahedron).
-const sphereGeo = new THREE.IcosahedronGeometry(0.90, 3);
+// Detail 4 smooths the silhouette enough for soft audio motion while remaining
+// small for a desktop visualizer (icosahedron detail grows exponentially).
+const sphereGeo = new THREE.IcosahedronGeometry(0.90, 4);
 const sphereMat = new THREE.ShaderMaterial({
   vertexShader,
   fragmentShader,
