@@ -1772,7 +1772,7 @@ const vertexShader = `
     float n3 = snoise(warpedPos * 3.8 + uTime * 0.10) * (0.20 + uHigh * 0.14);
     float noise = n1 + n2 + n3;
     float motionScale = mix(1.0, 0.58, uReducedMotion);
-    float beatKick = min(pow(max(noise, 0.0), 1.5) * uBeatPulse * 0.26 * uSpikeMul, 0.10);
+    float beatKick = min(pow(max(noise, 0.0), 1.5) * uBeatPulse * 0.16 * uSpikeMul, 0.065);
 
     // Frequency topology: bass energy concentrated near poles, treble along equator
     float poleAxis = abs(normalize(position).y);
@@ -1785,20 +1785,21 @@ const vertexShader = `
     float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.007
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
-    float spikeAmp = (uBass * 0.085 + uBeatFlash * 0.075) * uSpikeMul;
+    float spikeAmp = (uBass * 0.045 + uBeatFlash * 0.055) * uSpikeMul;
     float planetDisplacement = noise * (0.030 + spikeAmp)
-                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.006 + equAxis * 0.004)
+                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.003 + equAxis * 0.002)
                              + windDrift + idleBreath + beatKick * motionScale;
 
     // Pulse-wire mode uses a dedicated, frequency-accurate 20–180 Hz signal.
     // Quiet audio stays close to a sphere; bass attacks push a bounded set of
     // outward spikes. The mode mix keeps transitions interruptible and smooth.
     float wireEnergy = pow(clamp(uWireBass, 0.0, 1.0), 1.18);
-    float wirePeak = pow(max(n1 * 0.72 + n3 * 0.28, 0.0), 1.65);
-    float wireDisplacement = noise * 0.007
-                           + wirePeak * wireEnergy * 0.25 * uSpikeMul
-                           + max(noise, 0.0) * wireEnergy * 0.035 + beatKick;
-    wireDisplacement = clamp(wireDisplacement * motionScale, -0.025, 0.27);
+    float wirePeak = pow(max(n1 * 0.72 + n3 * 0.28, 0.0), 1.85);
+    float wireHit = 0.28 + uBeatFlash * 0.72;
+    float wireDisplacement = noise * 0.006
+                           + wirePeak * wireEnergy * wireHit * 0.16 * uSpikeMul
+                           + max(noise, 0.0) * wireEnergy * 0.022 + beatKick;
+    wireDisplacement = clamp(wireDisplacement * motionScale, -0.020, 0.18);
     float displacement = mix(planetDisplacement, wireDisplacement, uWireModeMix);
 
     vDisplacement = displacement;
