@@ -2188,7 +2188,7 @@ const glowMat1 = new THREE.ShaderMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const glowSphere1 = new THREE.Mesh(sphereGeo, glowMat1);
-glowSphere1.scale.setScalar(1.008);
+glowSphere1.scale.setScalar(1.018);
 glowSphere1.renderOrder = 2;
 sphere.add(glowSphere1);
 
@@ -2199,7 +2199,7 @@ const glowMat2 = new THREE.ShaderMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const glowSphere2 = new THREE.Mesh(sphereGeo, glowMat2);
-glowSphere2.scale.setScalar(1.022);
+glowSphere2.scale.setScalar(1.050);
 glowSphere2.renderOrder = 3;
 sphere.add(glowSphere2);
 
@@ -3334,8 +3334,8 @@ function animate() {
   haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
   coreSphere.scale.setScalar(coreScale);
   // Keep glow copies registered with the main mesh to avoid a jittery double-outline.
-  glowSphere1.scale.setScalar(1.006);
-  glowSphere2.scale.setScalar(1.012);
+  glowSphere1.scale.setScalar(1.018);
+  glowSphere2.scale.setScalar(1.050);
   glowSphere1.rotation.set(0, 0, 0);
   glowSphere2.rotation.set(0, 0, 0);
 
