@@ -1791,10 +1791,11 @@ const vertexShader = `
     float windDrift = sin(position.x * cos(windAngle) * 2.1 + position.z * sin(windAngle) * 1.8 + uTime * windSpeed) * 0.007
                     + sin(position.y * 1.8 + uTime * windSpeed * 0.72) * 0.005;
     float idleBreath = sin(uTime * 0.35 + position.x * 0.9) * 0.016 + sin(uTime * 0.61 + position.z * 1.1 + 1.7) * 0.012;
-    float spikeAmp = (uBass * 0.045 + uBeatFlash * 0.055) * uSpikeMul;
-    float planetDisplacement = noise * (0.030 + spikeAmp)
-                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.003 + equAxis * 0.002)
-                             + windDrift + idleBreath + beatKick * motionScale;
+    float spikeAmp = (uBass * 0.026 + uBeatFlash * 0.020) * uSpikeMul;
+    float planetDisplacement = noise * (0.018 + spikeAmp)
+                             + abs(snoise(position * 5.5 + uTime * 0.16)) * uHigh * (0.001 + equAxis * 0.001)
+                             + windDrift + idleBreath + beatKick * 0.35;
+    planetDisplacement = clamp(planetDisplacement * motionScale, -0.025, 0.055);
 
     // Pulse-wire mode uses a dedicated, frequency-accurate 20–180 Hz signal.
     // Quiet audio stays close to a sphere; bass attacks push a bounded set of
@@ -3332,14 +3333,11 @@ function animate() {
   coreMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
   haloMat.uniforms.uGlowColor.value.lerp(_glowTarget, 0.04);
   coreSphere.scale.setScalar(coreScale);
-  // Pulse Wire keeps glow layers aligned, avoiding a jittery double-outline.
-  const glowLayerMotion = 1 - _wireModeMix;
-  glowSphere1.scale.setScalar(1.008 + (_sBass * 0.025 + beatFlash * 0.040) * glowLayerMotion);
-  glowSphere2.scale.setScalar(1.022 + (_sBass * 0.050 + beatFlash * 0.080) * glowLayerMotion);
-  glowSphere1.rotation.x = Math.sin(time * 0.07) * 0.14 * glowLayerMotion;
-  glowSphere1.rotation.z = Math.cos(time * 0.05) * 0.09 * glowLayerMotion;
-  glowSphere2.rotation.x = Math.sin(time * 0.11 + 1.2) * 0.10 * glowLayerMotion;
-  glowSphere2.rotation.z = Math.cos(time * 0.08 + 0.7) * 0.07 * glowLayerMotion;
+  // Keep glow copies registered with the main mesh to avoid a jittery double-outline.
+  glowSphere1.scale.setScalar(1.006);
+  glowSphere2.scale.setScalar(1.012);
+  glowSphere1.rotation.set(0, 0, 0);
+  glowSphere2.rotation.set(0, 0, 0);
 
   // ── Orbit rings — slow, readable motion with bass pulse ─────────────
   _orbitSpinBoost *= 0.88;
