@@ -70,7 +70,7 @@ responsible for following the service's terms and local copyright rules.
 
 ```bash
 npm ci
-npm audit --audit-level=high
+node scripts/audit-gate.mjs
 node --check main.js
 ```
 
@@ -84,8 +84,16 @@ is pinned to `4.32.0` and staged at build time rather than listed as a runtime
 dependency, so the bundled API is reproducible and does not shift when upstream
 publishes a breaking change. The `predist` step also forces a
 `music-metadata@11.14.0` override to resolve a transitive version conflict during
-that staging install. The root dependency tree forces `brace-expansion@5.0.8`
-to retain the patched release required by the security audit.
+that staging install. The root dependency tree forces `brace-expansion@5.0.12`
+and `basic-ftp@6.2.3` to retain the patched releases required by the security
+audit.
+
+`scripts/audit-gate.mjs` fails CI on any high or critical advisory except the
+reviewed exceptions recorded in that file. The only exception today is
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)
+(node-forge signature verification, no patched release yet): the bundled API
+uses node-forge only for RSA public-key encryption and never verifies
+signatures.
 
 ## License
 
